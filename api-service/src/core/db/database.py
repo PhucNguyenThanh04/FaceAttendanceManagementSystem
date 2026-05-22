@@ -1,0 +1,30 @@
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from src.core.configs.config import configs
+from src.utils.setup_logger import setup_logger
+from src.core.db.base import Base
+
+logger = setup_logger(__name__)
+
+engine = create_async_engine(
+    configs.DATABASE_URL,      # postgresql+asyncpg://user:pass@localhost/dbname
+    pool_size=5,
+    max_overflow=10,
+    echo=False,
+)
+
+AsyncSessionLocal = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+
+async def init_db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables created successfully.")
+
+
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        yield session

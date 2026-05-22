@@ -1,0 +1,18 @@
+# required packages for the api-service
+
+fastapi==0.135.3
+uvicorn==0.43.0
+python-dotenv==1.2.2
+pydantic==2.12.5
+pydantic-core==2.41.5
+pydantic-settings==2.13.1
+asyncpg==0.31.0
+sqlalchemy==2.0.49
+opencv-python==4.8.1.78
+insightface==0.7.3
+qdrant-client==1.17.1
+torch==2.5.1
+torchvision==0.20.1
+torchaudio==2.5.1
+tensorboardx==2.6.5
+alembic==1.18.4

@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "api-service"
+version = "0.1.0"
+description = "quan ly package api server"
+authors = ["PhucNguyenThanh04 <thanhphucnguyen101204@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "3.10.12"
+
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

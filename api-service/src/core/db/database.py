@@ -1,12 +1,12 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from src.core.configs.config import configs
+from src.core.configs.settings import settings
 from src.utils.setup_logger import setup_logger
 from src.core.db.base import Base
 
 logger = setup_logger(__name__)
 
 engine = create_async_engine(
-    configs.DATABASE_URL,      # postgresql+asyncpg://user:pass@localhost/dbname
+    settings.DATABASE_URL,      # postgresql+asyncpg://user:pass@localhost/dbname
     pool_size=5,
     max_overflow=10,
     echo=False,

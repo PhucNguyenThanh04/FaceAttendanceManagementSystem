@@ -1,9 +1,11 @@
 from pathlib import Path
+from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[3]  # đi lên api-service/
 
-class Config(BaseSettings):
+
+class Setting(BaseSettings):
     DATABASE_URL: str
     DATABASE_PORT: int
     DATABASE_HOST: str
@@ -39,4 +41,10 @@ class Config(BaseSettings):
     )
 
 
-configs = Config()
+@lru_cache
+def get_settings() -> Setting:
+    return Setting()
+
+
+# Shortcut dùng trong toàn app
+settings = get_settings()

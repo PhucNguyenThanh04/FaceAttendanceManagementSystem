@@ -9,15 +9,12 @@ from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.entities.auths import Auth
-from app.core.db.database import get_db
-from app.core.db.enums import StaffRole
-from app.core.configs.config import configs
+from src.core.configs.settings import settings
 
-JWT_SECRET_KEY = configs.JWT_SECRET_KEY
-ALGORITHM = configs.JWT_ALGORITHM
-ACCESS_TOKEN_EXPIRE_MINUTES = configs.ACCESS_TOKEN_EXPIRE_MINUTES
-REFRESH_TOKEN_EXPIRE_DAYS = configs.REFRESH_TOKEN_EXPIRE_DAYS
+JWT_SECRET_KEY = settings.JWT_SECRET_KEY
+ALGORITHM = settings.JWT_ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 
 oauth2_bearer = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -66,44 +63,3 @@ def create_token(data: dict, expires_delta: Union[timedelta, None] = None) -> st
 def decode_token(token: str):
     return jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
 
-
-async def get_current_user(
-    token: str = Depends(oauth2_bearer),
-    db: AsyncSession = Depends(get_db),
-):
-    try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
-
-        if payload.get("type") != "access":
-            raise HTTPException(status_code=401, detail="Invalid token type")
-
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    try:
-        user_uuid = uuid.UUID(user_id)
-    except ValueError:
-        raise HTTPException(status_code=401, detail="Invalid token subject")
-
-    result = await db.execute(select(Auth).where(Auth.id == user_uuid))
-    user = result.scalars().first()
-
-    if user is None or not user.is_active:
-        raise HTTPException(status_code=401, detail="User not found")
-
-    return user
-
-
-def require_roles(*allowed_roles: StaffRole):
-    async def role_checker(current_user: Auth = Depends(get_current_user)):
-        if current_user.role not in allowed_roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Forbidden"
-            )
-        return current_user
-
-    return role_checker

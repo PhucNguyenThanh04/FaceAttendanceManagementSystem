@@ -6,7 +6,7 @@ from src.core.db.base import Base
 logger = setup_logger(__name__)
 
 engine = create_async_engine(
-    settings.DATABASE_URL,      # postgresql+asyncpg://user:pass@localhost/dbname
+    settings.database_url,      # postgresql+asyncpg://user:pass@localhost/dbname
     pool_size=5,
     max_overflow=10,
     echo=False,

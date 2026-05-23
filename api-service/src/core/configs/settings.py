@@ -6,34 +6,42 @@ BASE_DIR = Path(__file__).resolve().parents[3]  # đi lên api-service/
 
 
 class Setting(BaseSettings):
-    DATABASE_URL: str
-    DATABASE_PORT: int
-    DATABASE_HOST: str
-    DATABASE_NAME: str
-    DATABASE_USER: str
-    DATABASE_PASSWORD: str
+    app_name: str = "API Service"
+    debug: bool = True
+    app_host: str = "0.0.0.0"
+    app_port: int = 8000
 
-    REDIS_HOST: str
-    REDIS_PORT: int
-    REDIS_PASSWORD: str
-    REDIS_URL: str
-    REDIS_DB_SESSION: int
-    REDIS_DB_ATTENDANCE: int
+    ai_service_base_url: str
 
-    MAIL_USERNAME: str
-    MAIL_PASSWORD: str
-    MAIL_FROM: str
-    MAIL_PORT: int
-    MAIL_SERVER: str
-    MAIL_TLS: bool
-    MAIL_SSL: bool
+    database_url: str
+    database_port: int
+    database_host: str
+    database_name: str
+    database_user: str
+    database_password: str
 
-    JWT_SECRET_KEY: str
-    JWT_ALGORITHM: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int
-    REFRESH_TOKEN_EXPIRE_DAYS: int
+    redis_host: str
+    redis_port: int
+    redis_password: str
+    redis_url: str
+    redis_db_session: int
+    redis_db_attendance: int
 
-    CORS_ORIGINS: str
+    mail_username: str
+    mail_password: str
+    mail_from: str
+    mail_port: int
+    mail_server: str
+    mail_tls: bool
+    mail_ssl: bool
+
+    jwt_secret_key: str
+    jwt_algorithm: str
+    access_token_expire_minutes: int
+    refresh_token_expire_days: int
+
+    cors_origins: str
+
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

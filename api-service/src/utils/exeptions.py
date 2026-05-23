@@ -57,7 +57,7 @@ async def app_exception_handler(request: Request, exc: AppBaseException):
     )
 
 # from fastapi import FastAPI
-# from utils.exceptions import app_exception_handler, AppBaseException
+# from utils_ml_pipeline.exceptions import app_exception_handler, AppBaseException
 #
 # app = FastAPI()
 # app.add_exception_handler(AppBaseException, app_exception_handler)

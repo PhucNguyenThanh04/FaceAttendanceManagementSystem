@@ -21,6 +21,7 @@ bearer_scheme = HTTPBearer()
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Security(bearer_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    db : AsyncSession = Depends(get_db)
 ) -> User:
     """Decode JWT → load User từ DB. Dùng cho mọi endpoint cần auth."""
     credentials_exception = HTTPException(

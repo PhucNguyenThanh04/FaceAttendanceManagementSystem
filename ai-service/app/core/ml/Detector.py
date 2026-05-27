@@ -1,19 +1,21 @@
 import insightface
 import numpy as np
 from typing import List, Dict
+from pathlib import Path
 from app.utils.setup_logger import setup_logger
 
 logger = setup_logger(__name__)
 
+
 class Detector:
 
     def __init__(self,
-                 model_weight: str, # path to model weight file
+                 model_weight: str | Path, # path to model weight file
                  device: int = 0,
                  conf_thresh: float = 0.5,
                  img_size: int = 640
                  ) -> None:
-        self.model = insightface.model_zoo.get_model(model_weight)
+        self.model = insightface.model_zoo.get_model(str(model_weight))
         ctx_id = device if device >= 0 else -1
         self.model.prepare(
             ctx_id=ctx_id,
@@ -79,4 +81,3 @@ class Detector:
 #             break
 #     cap.release()
 #     cv2.destroyAllWindows()
-

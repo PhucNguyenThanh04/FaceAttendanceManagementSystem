@@ -1,6 +1,7 @@
 
 import insightface
 import numpy as np
+from pathlib import Path
 from app.utils.setup_logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -9,10 +10,10 @@ logger = setup_logger(__name__)
 class Embedder:
     def __init__(
         self,
-        model_weight: str,  # path to arcface
+        model_weight: str | Path,  # path to arcface
         device: int = 0,
     ) -> None:
-        self.model = insightface.model_zoo.get_model(model_weight)
+        self.model = insightface.model_zoo.get_model(str(model_weight))
         ctx_id = device if device >= 0 else -1
         self.model.prepare(ctx_id=ctx_id)
         logger.info(

@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     ai_service_port: int
     workers: int
     gpu_id: int
+    api_key: str
 
     log_level: str = "INFO"
 
@@ -22,16 +23,15 @@ class Settings(BaseSettings):
     host_camera: str
     port_camera: int
 
-
     qdrant_collection_name: str
     host_qdrant: str
     port_qdrant: int
     url_qdrant: str
     qdrant_timeout: float = 5.0
 
-    weight_detector: Path
-    weight_embedder: Path
-    model_dir_antispoof: Path
+    weight_detector: str
+    weight_embedder: str
+    model_dir_antispoof: str
     ml_device: int
 
     attendance_cooldown_seconds: int

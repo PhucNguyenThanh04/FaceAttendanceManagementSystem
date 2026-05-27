@@ -64,9 +64,9 @@ def _prepend_sys_path(path: Path) -> None:
 
 _prepend_sys_path(ANTI_SPOOF_ROOT)
 
-from src.anti_spoof_predict import AntiSpoofPredict
-from src.generate_patches import CropImage
-from src.utility import parse_model_name
+from src_Antispoofting.anti_spoof_predict import AntiSpoofPredict
+from src_Antispoofting.generate_patches import CropImage
+from src_Antispoofting.utility import parse_model_name
 
 logger = setup_logger(__name__)
 

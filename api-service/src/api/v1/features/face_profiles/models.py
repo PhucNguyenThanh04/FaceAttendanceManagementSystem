@@ -6,8 +6,6 @@ Bảng sở hữu:
 
 Quan hệ:
   - 1-1 với employees (mỗi nhân viên chỉ có 1 face profile active tại một thời điểm)
-  - qdrant_point_ids (JSONB): lưu list vector IDs trong Qdrant
-    ví dụ: ["uuid-1", "uuid-2", ..., "uuid-7"]  (5-7 vectors/người)
 
 Không có feature nào import model này trực tiếp.
 Attendance events chỉ lưu employee_id, không FK vào face_profiles.
@@ -15,10 +13,10 @@ Attendance events chỉ lưu employee_id, không FK vào face_profiles.
 
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.db.base import Base, TimestampMixin
@@ -42,8 +40,6 @@ class FaceProfile(Base, TimestampMixin):
         revoked  → (re-enroll)                → pending (record mới)
 
     qdrant_collection: tên collection trong Qdrant chứa vectors của profile này.
-    qdrant_point_ids:  list string IDs của từng vector point trong Qdrant.
-                       Khi revoke, service sẽ xóa toàn bộ IDs này khỏi Qdrant.
 
     embedding_model / embedding_version: metadata để biết vector được tạo
     bằng model nào — dùng khi migrate sang model mới (re-embed toàn bộ).
@@ -77,10 +73,6 @@ class FaceProfile(Base, TimestampMixin):
     qdrant_collection: Mapped[str] = mapped_column(
         String, nullable=False, index=True,
         comment="Tên collection trong Qdrant",
-    )
-    qdrant_point_ids: Mapped[Optional[List]] = mapped_column(
-        JSONB, nullable=True,
-        comment='List vector IDs, e.g. ["uuid-1", "uuid-2", ...]',
     )
 
     # Embedding metadata
@@ -121,13 +113,6 @@ class FaceProfile(Base, TimestampMixin):
             f"<FaceProfile id={self.profile_id} "
             f"emp={self.employee_id} status={self.status}>"
         )
-
-    @property
-    def point_count(self) -> int:
-        """Số lượng vector đang lưu trong Qdrant."""
-        if self.qdrant_point_ids is None:
-            return 0
-        return len(self.qdrant_point_ids)
 
     @property
     def is_enrollable(self) -> bool:

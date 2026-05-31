@@ -4,7 +4,6 @@ app/features/users/models.py
 Bảng sở hữu:
   - users          : tài khoản đăng nhập
   - roles          : danh sách vai trò
-  - user_roles     : junction M2M user ↔ role
 
 Được import bởi: hầu hết mọi feature (FK đến users.user_id)
 """
@@ -13,7 +12,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,43 +38,64 @@ class User(Base, TimestampMixin):
         server_default=func.gen_random_uuid(),
         default=uuid.uuid4,
     )
-    username: Mapped[str] = mapped_column(
+    email: Mapped[str] = mapped_column(
         String,
         unique=True,
         nullable=False,
         index=True,
     )
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    role_id: Mapped[int] = mapped_column(
+        ForeignKey("roles.role_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
     status: Mapped[UserStatus] = mapped_column(
         Enum(UserStatus, name="user_status"),
         nullable=False,
         default=UserStatus.active,
         index=True,
     )
+    token_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
     last_login_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    refresh_token_hash: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    refresh_token_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    refresh_token_created_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
 
     # ── Relationships ──────────────────────────────────────────────────────
-    # user_roles (M2M sang roles, qua UserRole)
-    user_roles: Mapped[List["UserRole"]] = relationship(
-        back_populates="user",
-        cascade="all, delete-orphan",
-        lazy="selectin",           # load cùng user — cần roles thường xuyên
-    )
-
-    # Convenience: truy cập trực tiếp danh sách Role object
-    roles: Mapped[List["Role"]] = relationship(
-        secondary="user_roles",
-        viewonly=True,             # chỉ đọc, thao tác qua user_roles
+    # 1 user = 1 role
+    role: Mapped["Role"] = relationship(
+        back_populates="users",
         lazy="selectin",
     )
 
     # Quan hệ 1-1 sang Employee (một user có thể là một nhân viên)
     employee: Mapped[Optional["Employee"]] = relationship(
         back_populates="user",
+        foreign_keys="Employee.user_id",
         uselist=False,
+        lazy="select",
+    )
+    registered_employees: Mapped[List["Employee"]] = relationship(
+        back_populates="registered_by_user",
+        foreign_keys="Employee.registered_by",
         lazy="select",
     )
 
@@ -91,15 +111,14 @@ class User(Base, TimestampMixin):
     )
 
     def __repr__(self) -> str:
-        return f"<User id={self.user_id} username={self.username}>"
-
-    @property
-    def role_names(self) -> List[RoleName]:
-        """Shortcut lấy danh sách tên role."""
-        return [r.name for r in self.roles]
+        return f"<User id={self.user_id} email={self.email}>"
 
     def has_role(self, role: RoleName) -> bool:
-        return role in self.role_names
+        return self.role.name == role
+
+    @property
+    def role_name(self) -> RoleName:
+        return self.role.name
 
 
 # ── roles ──────────────────────────────────────────────────────────────────
@@ -116,43 +135,10 @@ class Role(Base, TimestampMixin):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # ── Relationships ──────────────────────────────────────────────────────
-    user_roles: Mapped[List["UserRole"]] = relationship(
+    users: Mapped[List["User"]] = relationship(
         back_populates="role",
-        cascade="all, delete-orphan",
+        lazy="select",
     )
 
     def __repr__(self) -> str:
         return f"<Role {self.name}>"
-
-
-# ── user_roles (junction M2M) ──────────────────────────────────────────────
-
-class UserRole(Base):
-    """
-    Bảng junction M2M users ↔ roles.
-    Không dùng TimestampMixin vì chỉ có assigned_at, không có updated_at.
-    """
-    __tablename__ = "user_roles"
-
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.user_id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    role_id: Mapped[int] = mapped_column(
-        ForeignKey("roles.role_id", ondelete="CASCADE"),
-        primary_key=True,
-        index=True,
-    )
-    assigned_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-
-    # ── Relationships ──────────────────────────────────────────────────────
-    user: Mapped["User"] = relationship(back_populates="user_roles")
-    role: Mapped["Role"] = relationship(back_populates="user_roles")
-
-    def __repr__(self) -> str:
-        return f"<UserRole user={self.user_id} role={self.role_id}>"

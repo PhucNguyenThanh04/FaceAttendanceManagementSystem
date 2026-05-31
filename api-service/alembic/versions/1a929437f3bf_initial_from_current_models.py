@@ -1,8 +1,8 @@
-"""initial_schema
+"""initial from current models
 
-Revision ID: 6fc0cfd1ec5a
+Revision ID: 1a929437f3bf
 Revises: 
-Create Date: 2026-05-23 03:22:28.102649
+Create Date: 2026-05-30 12:42:12.652917
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '6fc0cfd1ec5a'
+revision: str = '1a929437f3bf'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -81,18 +81,6 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('role_id'),
     sa.UniqueConstraint('name')
     )
-    op.create_table('users',
-    sa.Column('user_id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
-    sa.Column('username', sa.String(), nullable=False),
-    sa.Column('password_hash', sa.String(), nullable=False),
-    sa.Column('status', sa.Enum('active', 'inactive', 'locked', name='user_status'), nullable=False),
-    sa.Column('last_login_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.PrimaryKeyConstraint('user_id')
-    )
-    op.create_index(op.f('ix_users_status'), 'users', ['status'], unique=False)
-    op.create_index(op.f('ix_users_username'), 'users', ['username'], unique=True)
     op.create_table('work_shifts',
     sa.Column('shift_id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('name', sa.String(), nullable=False),
@@ -110,6 +98,25 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_work_shifts_code'), 'work_shifts', ['code'], unique=True)
     op.create_index(op.f('ix_work_shifts_is_active'), 'work_shifts', ['is_active'], unique=False)
+    op.create_table('users',
+    sa.Column('user_id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
+    sa.Column('email', sa.String(), nullable=False),
+    sa.Column('password_hash', sa.String(), nullable=False),
+    sa.Column('role_id', sa.Integer(), nullable=False),
+    sa.Column('status', sa.Enum('active', 'inactive', 'locked', name='user_status'), nullable=False),
+    sa.Column('token_version', sa.Integer(), server_default='0', nullable=False),
+    sa.Column('last_login_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('refresh_token_hash', sa.Text(), nullable=True),
+    sa.Column('refresh_token_expires_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('refresh_token_created_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['role_id'], ['roles.role_id'], ondelete='RESTRICT'),
+    sa.PrimaryKeyConstraint('user_id')
+    )
+    op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
+    op.create_index(op.f('ix_users_role_id'), 'users', ['role_id'], unique=False)
+    op.create_index(op.f('ix_users_status'), 'users', ['status'], unique=False)
     op.create_table('audit_logs',
     sa.Column('log_id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('performed_by', sa.UUID(), nullable=True),
@@ -136,7 +143,6 @@ def upgrade() -> None:
     sa.Column('employee_code', sa.String(), nullable=False),
     sa.Column('full_name', sa.String(), nullable=False),
     sa.Column('phone', sa.String(), nullable=True),
-    sa.Column('email', sa.String(), nullable=True),
     sa.Column('avatar_url', sa.Text(), nullable=True),
     sa.Column('department_id', sa.Integer(), nullable=True),
     sa.Column('position_id', sa.Integer(), nullable=True),
@@ -192,15 +198,6 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('setting_id')
     )
     op.create_index(op.f('ix_system_settings_key'), 'system_settings', ['key'], unique=True)
-    op.create_table('user_roles',
-    sa.Column('user_id', sa.UUID(), nullable=False),
-    sa.Column('role_id', sa.Integer(), nullable=False),
-    sa.Column('assigned_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['role_id'], ['roles.role_id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['user_id'], ['users.user_id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('user_id', 'role_id')
-    )
-    op.create_index(op.f('ix_user_roles_role_id'), 'user_roles', ['role_id'], unique=False)
     op.create_table('attendance_events',
     sa.Column('event_id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('employee_id', sa.UUID(), nullable=True),
@@ -419,8 +416,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_attendance_events_event_time'), table_name='attendance_events')
     op.drop_index(op.f('ix_attendance_events_employee_id'), table_name='attendance_events')
     op.drop_table('attendance_events')
-    op.drop_index(op.f('ix_user_roles_role_id'), table_name='user_roles')
-    op.drop_table('user_roles')
     op.drop_index(op.f('ix_system_settings_key'), table_name='system_settings')
     op.drop_table('system_settings')
     op.drop_index(op.f('ix_notifications_user_id'), table_name='notifications')
@@ -442,12 +437,13 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_audit_logs_created_at'), table_name='audit_logs')
     op.drop_index(op.f('ix_audit_logs_action'), table_name='audit_logs')
     op.drop_table('audit_logs')
+    op.drop_index(op.f('ix_users_status'), table_name='users')
+    op.drop_index(op.f('ix_users_role_id'), table_name='users')
+    op.drop_index(op.f('ix_users_email'), table_name='users')
+    op.drop_table('users')
     op.drop_index(op.f('ix_work_shifts_is_active'), table_name='work_shifts')
     op.drop_index(op.f('ix_work_shifts_code'), table_name='work_shifts')
     op.drop_table('work_shifts')
-    op.drop_index(op.f('ix_users_username'), table_name='users')
-    op.drop_index(op.f('ix_users_status'), table_name='users')
-    op.drop_table('users')
     op.drop_table('roles')
     op.drop_index(op.f('ix_positions_name'), table_name='positions')
     op.drop_index(op.f('ix_positions_is_active'), table_name='positions')

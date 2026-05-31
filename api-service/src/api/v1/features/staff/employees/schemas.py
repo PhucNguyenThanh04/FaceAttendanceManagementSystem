@@ -8,67 +8,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from src.api.v1.shared.enums import EmployeeStatus
 
 PHONE_PATTERN = r"^\+?[0-9]{8,15}$"
-EMAIL_PATTERN = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
 GENDER_ALLOWED = {"male", "female", "other"}
 
 
-class DepartmentBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-    code: str | None = Field(default=None, min_length=1, max_length=30)
-    description: str | None = Field(default=None, max_length=500)
-    is_active: bool = True
-
-
-class DepartmentCreate(DepartmentBase):
-    pass
-
-
-class DepartmentUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=100)
-    code: str | None = Field(default=None, min_length=1, max_length=30)
-    description: str | None = Field(default=None, max_length=500)
-    is_active: bool | None = None
-
-
-class DepartmentRead(DepartmentBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    department_id: int
-    created_at: datetime
-    updated_at: datetime
-
-
-class PositionBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-    code: str | None = Field(default=None, min_length=1, max_length=30)
-    description: str | None = Field(default=None, max_length=500)
-    is_active: bool = True
-
-
-class PositionCreate(PositionBase):
-    pass
-
-
-class PositionUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=100)
-    code: str | None = Field(default=None, min_length=1, max_length=30)
-    description: str | None = Field(default=None, max_length=500)
-    is_active: bool | None = None
-
-
-class PositionRead(PositionBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    position_id: int
-    created_at: datetime
-    updated_at: datetime
-
-
 class EmployeeBase(BaseModel):
-    employee_code: str = Field(..., min_length=1, max_length=50)
+    employee_code: str | None = Field(default=None, min_length=1, max_length=50)
     full_name: str = Field(..., min_length=1, max_length=120)
     phone: str | None = Field(default=None, pattern=PHONE_PATTERN)
-    email: str | None = Field(default=None, pattern=EMAIL_PATTERN)
     avatar_url: str | None = Field(default=None, max_length=500)
     department_id: int | None = Field(default=None, ge=1)
     position_id: int | None = Field(default=None, ge=1)
@@ -108,7 +54,6 @@ class EmployeeUpdate(BaseModel):
     employee_code: str | None = Field(default=None, min_length=1, max_length=50)
     full_name: str | None = Field(default=None, min_length=1, max_length=120)
     phone: str | None = Field(default=None, pattern=PHONE_PATTERN)
-    email: str | None = Field(default=None, pattern=EMAIL_PATTERN)
     avatar_url: str | None = Field(default=None, max_length=500)
     department_id: int | None = Field(default=None, ge=1)
     position_id: int | None = Field(default=None, ge=1)
@@ -144,10 +89,10 @@ class EmployeeRead(BaseModel):
 
     employee_id: uuid.UUID
     user_id: uuid.UUID | None = None
+    registered_by: uuid.UUID | None = None
     employee_code: str
     full_name: str
     phone: str | None = None
-    email: str | None = None
     avatar_url: str | None = None
     department_id: int | None = None
     position_id: int | None = None
@@ -168,6 +113,7 @@ class EmployeeSummary(BaseModel):
     employee_id: uuid.UUID
     employee_code: str
     full_name: str
+    registered_by: uuid.UUID | None = None
     department_id: int | None = None
     position_id: int | None = None
     manager_id: uuid.UUID | None = None
@@ -182,13 +128,3 @@ class EmployeeListQuery(BaseModel):
     position_id: int | None = Field(default=None, ge=1)
     manager_id: uuid.UUID | None = None
     status: EmployeeStatus | None = None
-
-
-class AssignDepartmentManagerRequest(BaseModel):
-    manager_id: uuid.UUID
-    department_id: int = Field(..., ge=1)
-
-
-class UnassignDepartmentManagerRequest(BaseModel):
-    manager_id: uuid.UUID
-    department_id: int = Field(..., ge=1)

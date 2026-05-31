@@ -1,14 +1,32 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from src.api.v1.shared.enums import RoleName, UserStatus
+from src.core.configs.settings import settings
 
-USERNAME_PATTERN = r"^[a-zA-Z0-9_.-]{4,50}$"
+EMAIL_PATTERN = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
 PASSWORD_MIN_LENGTH = 8
+APP_TZ = ZoneInfo(settings.database_timezone)
+
+
+def to_app_timezone(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(APP_TZ)
 
 
 class RoleRead(BaseModel):
@@ -20,21 +38,24 @@ class RoleRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    @field_serializer("created_at", "updated_at", when_used="json")
+    def serialize_role_datetimes(self, value: datetime) -> str:
+        return to_app_timezone(value).isoformat()
+
 
 class UserBase(BaseModel):
-    username: str = Field(
+    email: str = Field(
         ...,
-        min_length=4,
-        max_length=50,
-        pattern=USERNAME_PATTERN,
-        description="Allowed chars: a-z, A-Z, 0-9, _, ., -",
+        min_length=5,
+        max_length=255,
+        pattern=EMAIL_PATTERN,
     )
     status: UserStatus = UserStatus.active
 
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=PASSWORD_MIN_LENGTH, max_length=128)
-    role_names: list[RoleName] = Field(default_factory=lambda: [RoleName.employee], min_length=1)
+    role_name: RoleName = RoleName.employee
 
     @field_validator("password")
     @classmethod
@@ -45,24 +66,17 @@ class UserCreate(UserBase):
             raise ValueError("Password must include at least one digit")
         return value
 
-    @field_validator("role_names")
-    @classmethod
-    def validate_unique_roles(cls, value: list[RoleName]) -> list[RoleName]:
-        if len(set(value)) != len(value):
-            raise ValueError("role_names contains duplicate values")
-        return value
-
 
 class UserUpdate(BaseModel):
-    username: str | None = Field(
+    email: str | None = Field(
         default=None,
-        min_length=4,
-        max_length=50,
-        pattern=USERNAME_PATTERN,
+        min_length=5,
+        max_length=255,
+        pattern=EMAIL_PATTERN,
     )
     status: UserStatus | None = None
     password: str | None = Field(default=None, min_length=PASSWORD_MIN_LENGTH, max_length=128)
-    role_names: list[RoleName] | None = Field(default=None, min_length=1)
+    role_name: RoleName | None = None
 
     @field_validator("password")
     @classmethod
@@ -75,38 +89,30 @@ class UserUpdate(BaseModel):
             raise ValueError("Password must include at least one digit")
         return value
 
-    @field_validator("role_names")
-    @classmethod
-    def validate_unique_roles(cls, value: list[RoleName] | None) -> list[RoleName] | None:
-        if value is None:
-            return value
-        if len(set(value)) != len(value):
-            raise ValueError("role_names contains duplicate values")
-        return value
-
-
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     user_id: uuid.UUID
-    username: str
+    email: str
     status: UserStatus
     last_login_at: datetime | None = None
-    role_names: list[RoleName] = Field(default_factory=list)
-    roles: list[RoleRead] = Field(default_factory=list)
+    role_name: RoleName
+    role: RoleRead
     created_at: datetime
     updated_at: datetime
 
+    @field_serializer("last_login_at", when_used="json")
+    def serialize_last_login_at(self, value: datetime | None) -> str | None:
+        converted = to_app_timezone(value)
+        return converted.isoformat() if converted else None
+
+    @field_serializer("created_at", "updated_at", when_used="json")
+    def serialize_user_datetimes(self, value: datetime) -> str:
+        return to_app_timezone(value).isoformat()
+
 
 class UserRoleAssignRequest(BaseModel):
-    role_names: list[RoleName] = Field(..., min_length=1)
-
-    @field_validator("role_names")
-    @classmethod
-    def validate_unique_roles(cls, value: list[RoleName]) -> list[RoleName]:
-        if len(set(value)) != len(value):
-            raise ValueError("role_names contains duplicate values")
-        return value
+    role_name: RoleName
 
 
 class UserListQuery(BaseModel):

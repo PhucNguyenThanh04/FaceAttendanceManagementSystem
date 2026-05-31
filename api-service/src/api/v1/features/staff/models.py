@@ -67,7 +67,7 @@ class Position(Base, TimestampMixin):
     __tablename__ = "positions"
 
     position_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, index=True, unique=True)
     code: Mapped[Optional[str]] = mapped_column(String, unique=True, nullable=True, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(
@@ -111,13 +111,19 @@ class Employee(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    registered_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="User who created this employee profile",
+    )
 
     employee_code: Mapped[str] = mapped_column(
         String, unique=True, nullable=False, index=True
     )
     full_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
     phone: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # FKs tổ chức
@@ -162,6 +168,12 @@ class Employee(Base, TimestampMixin):
     # Quan hệ ngược lên User
     user: Mapped[Optional["User"]] = relationship(
         back_populates="employee",
+        foreign_keys=[user_id],
+        lazy="select",
+    )
+    registered_by_user: Mapped[Optional["User"]] = relationship(
+        back_populates="registered_employees",
+        foreign_keys=[registered_by],
         lazy="select",
     )
 
@@ -242,11 +254,7 @@ class Employee(Base, TimestampMixin):
 # ── department_managers (junction) ─────────────────────────────────────────
 
 class DepartmentManager(Base):
-    """
-    Junction: nhân viên nào được gán làm manager của phòng ban nào.
-    Một phòng ban có thể có nhiều manager (ví dụ: trưởng phó phòng).
-    Không dùng TimestampMixin vì chỉ có assigned_at.
-    """
+
     __tablename__ = "department_managers"
 
     manager_id: Mapped[uuid.UUID] = mapped_column(

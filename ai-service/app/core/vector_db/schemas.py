@@ -6,8 +6,6 @@ from datetime import datetime, timezone
 EMBEDDING_VERSION = "insightface-buffalo_l-v1"
 
 
-# ── Create ────────────────────────────────────────────────────────────────────
-
 class PayloadCreateRequest(BaseModel):
     staff_id: str
     face_profile_id: str        # UUID do API server tạo, dùng để map với PostgreSQL

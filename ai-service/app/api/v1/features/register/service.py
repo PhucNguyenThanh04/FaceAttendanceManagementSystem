@@ -10,8 +10,7 @@ from app.api.v1.features.register import schemas as schemas_register
 from app.core.vector_db import schemas as schemas_vector
 from app.core.vector_db.qdrant_repo import Vectordb
 
-logger = logging.getLogger(__name__)
-
+logger = setup_logger(__name__)
 SIMILARITY_THRESHOLD = 0.92
 
 
@@ -69,13 +68,6 @@ class RegisterService:
         session_id: str,
         payload: schemas_vector.PayloadCreateRequest,
     ) -> schemas_register.CommitResponse:
-        """
-        Lấy embedding từ RAM → upsert vào Qdrant kèm payload → xóa khỏi RAM.
-
-        payload gồm: staff_id, face_profile_id, username, status,
-                     embedding_version, created_at
-        — do API server tạo và gửi kèm lệnh commit.
-        """
         async with self._lock:
             embeddings = self._pending.pop(session_id, None)
 
@@ -105,10 +97,7 @@ class RegisterService:
         session_id: str,
         payload: schemas_vector.PayloadCreateRequest,
     ) -> schemas_register.CommitResponse:
-        """
-        Xóa vector cũ theo face_profile_id → commit embedding mới.
-        Dùng khi admin chụp lại ảnh cho 1 profile cụ thể.
-        """
+
         deleted = await self.vectordb.delete_by_face_profile_id(payload.face_profile_id)
         logger.info(
             "Re-enroll: đã xóa %d vector cũ | face_profile_id=%s",
@@ -119,7 +108,7 @@ class RegisterService:
     # ── Hủy session ───────────────────────────────────────────────────────────
 
     async def cancel(self, session_id: str) -> None:
-        """Hủy session — xóa embedding đang pending, không commit."""
+
         async with self._lock:
             removed = self._pending.pop(session_id, None)
         count = len(removed) if removed else 0
@@ -128,7 +117,6 @@ class RegisterService:
     # ── Xóa nhân viên ─────────────────────────────────────────────────────────
 
     async def delete_person(self, staff_id: str) -> int:
-        """Xóa toàn bộ vector của 1 nhân viên khỏi Qdrant."""
         deleted = await self.vectordb.delete_by_staff_id(staff_id)
         logger.info("Đã xóa %d vector | staff_id=%s", deleted, staff_id)
         return deleted
@@ -136,5 +124,4 @@ class RegisterService:
     # ── Kiểm tra enroll ───────────────────────────────────────────────────────
 
     async def count_vectors(self, staff_id: str) -> int:
-        """Kiểm tra số vector hiện có của 1 nhân viên."""
         return await self.vectordb.count_by_staff_id(staff_id)

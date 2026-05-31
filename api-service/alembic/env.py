@@ -20,7 +20,7 @@ from src.core.db.base import Base  # noqa: F401
 
 # Import tất cả models — không thiếu cái nào,
 # thiếu 1 model = Alembic không tạo bảng đó
-from src.api.v1.features.users.models import User, Role, UserRole  # noqa: F401
+from src.api.v1.features.users.models import User, Role  # noqa: F401
 from src.api.v1.features.staff.models import (  # noqa: F401
     Department, Position, Employee, DepartmentManager
 )

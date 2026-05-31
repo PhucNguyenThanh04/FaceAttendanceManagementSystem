@@ -4,11 +4,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import logging
+from redis.exceptions import AuthenticationError
 from sqlalchemy import text
 from src.core.cache.redis_client import create_redis_async_client
+from src.core.bootstrap.admin_seed import ensure_bootstrap_admin
 from src.core.configs.settings import settings
 from src.core.db.database import engine
 from src.utils.setup_logger import setup_logger
+from src.utils.exeptions import app_exception_handler, AppException
+
+
+from src.api.v1.routers import api_router
 
 logger = setup_logger(__name__, level=logging.DEBUG if settings.debug else logging.INFO)
 
@@ -25,13 +31,32 @@ async def lifespan(app: FastAPI):
     try:
         # Startup
         redis_client = create_redis_async_client()
-        await redis_client.ping()
+        try:
+            await redis_client.ping()
+        except AuthenticationError as exc:
+            # Redis server không bật password nhưng client lại gửi AUTH.
+            if "without any password configured" not in str(exc):
+                raise
+
+            logger.warning(
+                "Redis AUTH bị từ chối vì server không cấu hình password; fallback no-auth."
+            )
+            await redis_client.aclose()
+            redis_client = create_redis_async_client(force_no_auth=True)
+            await redis_client.ping()
+
         app.state.redis = redis_client
         logger.info("Redis kết nối thành công")
 
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
+            tz_result = await connection.execute(text("SHOW TIME ZONE"))
+            db_timezone = tz_result.scalar_one()
         logger.info("PostgreSQL kết nối thành công")
+        logger.info("PostgreSQL session timezone: %s", db_timezone)
+
+        await ensure_bootstrap_admin()
+        logger.info("Bootstrap admin check completed")
 
         ai_http_client = httpx.AsyncClient(
             base_url=settings.ai_service_base_url,
@@ -40,8 +65,7 @@ async def lifespan(app: FastAPI):
         )
         app.state.ai_http = ai_http_client
         logger.info(
-            "HTTP client khởi tạo thành công với base URL: %s",
-            settings.ai_service_base_url,
+            "HTTP client khởi tạo thành công"
         )
 
         yield
@@ -66,6 +90,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_exception_handler(AppException, app_exception_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=parse_cors_origins(settings.cors_origins),
@@ -73,6 +99,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(api_router)
 
 
 # ── Health check ──────────────────────────────────────────────────────────

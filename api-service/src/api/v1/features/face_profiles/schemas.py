@@ -12,7 +12,6 @@ class FaceProfileBase(BaseModel):
     employee_id: uuid.UUID
     status: FaceProfileStatus = FaceProfileStatus.pending
     qdrant_collection: str = Field(..., min_length=1, max_length=120)
-    qdrant_point_ids: list[str] | None = None
     embedding_model: str | None = Field(default=None, max_length=120)
     embedding_version: str | None = Field(default=None, max_length=120)
     registered_by: uuid.UUID | None = None
@@ -38,7 +37,6 @@ class FaceProfileCreate(BaseModel):
 class FaceProfileUpdate(BaseModel):
     status: FaceProfileStatus | None = None
     qdrant_collection: str | None = Field(default=None, min_length=1, max_length=120)
-    qdrant_point_ids: list[str] | None = None
     embedding_model: str | None = Field(default=None, max_length=120)
     embedding_version: str | None = Field(default=None, max_length=120)
     registered_by: uuid.UUID | None = None
@@ -62,7 +60,6 @@ class FaceProfileRead(BaseModel):
     employee_id: uuid.UUID
     status: FaceProfileStatus
     qdrant_collection: str
-    qdrant_point_ids: list[str] | None = None
     embedding_model: str | None = None
     embedding_version: str | None = None
     registered_by: uuid.UUID | None = None

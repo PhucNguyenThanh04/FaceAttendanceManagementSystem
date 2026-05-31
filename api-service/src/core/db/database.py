@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from src.core.configs.settings import settings
 from src.utils.setup_logger import setup_logger
 from src.core.db.base import Base
+from src.core.db import model_registry  # noqa: F401
 
 logger = setup_logger(__name__)
 
@@ -10,6 +11,9 @@ engine = create_async_engine(
     pool_size=5,
     max_overflow=10,
     echo=False,
+    connect_args={
+        "server_settings": {"timezone": settings.database_timezone}
+    },
 )
 
 AsyncSessionLocal = async_sessionmaker(

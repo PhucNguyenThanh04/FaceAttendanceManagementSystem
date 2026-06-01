@@ -59,7 +59,7 @@ class Vectordb:
                     payload={
                         "staff_id":          payload.staff_id,
                         "face_profile_id":   payload.face_profile_id,
-                        "username":          payload.username,
+                        "employee_code":     payload.employee_code,
                         "status":            payload.status,
                         "embedding_version": payload.embedding_version,
                         "created_at":        created_at,
@@ -177,7 +177,7 @@ class Vectordb:
             vector_schemas.PayloadSearchResponse(
                 staff_id=p.payload["staff_id"],
                 face_profile_id=p.payload["face_profile_id"],
-                username=p.payload["username"],
+                employee_code=p.payload.get("employee_code") or p.payload.get("username") or "",
                 status=p.payload["status"],
                 embedding_version=p.payload["embedding_version"],
                 created_at=p.payload["created_at"],
@@ -230,7 +230,11 @@ class Vectordb:
             return vector_schemas.PayloadIdentifyResponse(status="ambiguous", person=None)
 
         winner = person_info[top_id]
-        logger.info("Recognized: username=%s | confidence=%.4f", winner.username, top_score)
+        logger.info(
+            "Recognized: employee_code=%s | confidence=%.4f",
+            winner.employee_code,
+            top_score,
+        )
 
         return vector_schemas.PayloadIdentifyResponse(
             status="recognized",

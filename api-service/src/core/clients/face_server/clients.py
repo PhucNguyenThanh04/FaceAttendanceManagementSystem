@@ -42,8 +42,8 @@ class FaceServerClient:
         params = AIEnrollPhotoParams(session_id=session_id)
         files = {"file": (filename, image_bytes, content_type)}
         data = await self._request_json(
-            "POST",
-            AIServerPaths.ENROLL_PHOTO,
+            method="POST",
+            path=AIServerPaths.ENROLL_PHOTO,
             params=params.model_dump(mode="json"),
             files=files,
         )
@@ -52,8 +52,8 @@ class FaceServerClient:
 
     async def commit(self, body: AICommitRequest) -> AICommitResponse:
         data = await self._request_json(
-            "POST",
-            AIServerPaths.ENROLL_COMMIT,
+            method="POST",
+            path=AIServerPaths.ENROLL_COMMIT,
             json=body.model_dump(mode="json", exclude_none=True),
         )
         logger.debug(f"commit response: {data}")
@@ -61,8 +61,8 @@ class FaceServerClient:
 
     async def re_enroll(self, body: AICommitRequest) -> AICommitResponse:
         data = await self._request_json(
-            "POST",
-            AIServerPaths.ENROLL_REENROLL,
+            method="POST",
+            path=AIServerPaths.ENROLL_REENROLL,
             json=body.model_dump(mode="json", exclude_none=True),
         )
         logger.debug(f"re_enroll response: {data}")
@@ -70,33 +70,33 @@ class FaceServerClient:
 
     async def cancel_enrollment(self, session_id: str) -> AICancelEnrollmentResponse:
         data = await self._request_json(
-            "DELETE",
-            AIServerPaths.enroll_cancel(session_id),
+            method="DELETE",
+            path=AIServerPaths.enroll_cancel(session_id),
         )
         logger.debug(f"cancel_enrollment response: {data}")
         return AICancelEnrollmentResponse.model_validate(data)
 
     async def delete_person(self, staff_id: str) -> AIDeletePersonResponse:
         data = await self._request_json(
-            "DELETE",
-            AIServerPaths.delete_person(staff_id),
+            method="DELETE",
+            path=AIServerPaths.delete_person(staff_id),
         )
         logger.debug(f"delete_person response: {data}")
         return AIDeletePersonResponse.model_validate(data)
 
     async def check_enrolled_status(self, staff_id: str) -> AIEnrolledStatusResponse:
         data = await self._request_json(
-            "GET",
-            AIServerPaths.enrolled_status(staff_id),
+            method="GET",
+            path=AIServerPaths.enrolled_status(staff_id),
         )
         logger.debug(f"check_enrolled_status response: {data}")
         return AIEnrolledStatusResponse.model_validate(data)
 
     async def _request_json(
         self,
+        *,
         method: str,
         path: str,
-        *,
         require_api_key: bool = True,
         **kwargs: Any,
     ) -> dict[str, Any]:

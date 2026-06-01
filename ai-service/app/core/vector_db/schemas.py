@@ -9,7 +9,7 @@ EMBEDDING_VERSION = "insightface-buffalo_l-v1"
 class PayloadCreateRequest(BaseModel):
     staff_id: str
     face_profile_id: str        # UUID do API server tạo, dùng để map với PostgreSQL
-    username: str
+    employee_code: str
     status: str = "active"
     embedding_version: str = EMBEDDING_VERSION
     created_at: str | None = None   # AI server tự set nếu None
@@ -18,7 +18,7 @@ class PayloadCreateRequest(BaseModel):
 # ── Update ────────────────────────────────────────────────────────────────────
 
 class PayloadUpdateRequest(BaseModel):
-    username: str | None = None
+    employee_code: str | None = None
     status: str | None = None
 
 
@@ -27,7 +27,7 @@ class PayloadUpdateRequest(BaseModel):
 class PayloadSearchResponse(BaseModel):
     staff_id: str
     face_profile_id: str
-    username: str
+    employee_code: str
     status: str
     embedding_version: str
     created_at: str
@@ -43,4 +43,3 @@ class PayloadIdentifyResponse(BaseModel):
     votes: int | None = None
     total: int | None = None
     confidence: float | None = None
-

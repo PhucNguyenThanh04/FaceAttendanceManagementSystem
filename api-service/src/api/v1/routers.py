@@ -1,11 +1,15 @@
 from fastapi import APIRouter
 
 from src.api.v1.features.auth.controller import router as auth_router
+from src.api.v1.features.employee_onboarding.controller import (
+    router as employee_onboarding_router,
+)
 from src.api.v1.features.face_profiles.controller import router as face_profile_router
 from src.api.v1.features.staff.departments.controller import router as department_router
 from src.api.v1.features.staff.employees.controller import router as employee_router
 from src.api.v1.features.users.controller import router as user_router
 from src.api.v1.features.staff.position.controller import router as position_router
+from src.api.v1.features.uploads_avartar.controller import router as upload_avatar_router
 
 api_router = APIRouter()
 
@@ -13,7 +17,8 @@ api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(user_router)
 api_router.include_router(employee_router)
+api_router.include_router(employee_onboarding_router)
 api_router.include_router(department_router)
 api_router.include_router(position_router)
 api_router.include_router(face_profile_router)
-
+api_router.include_router(upload_avatar_router)

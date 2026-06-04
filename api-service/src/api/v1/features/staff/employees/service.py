@@ -21,12 +21,34 @@ class EmployeeService:
     def _to_read(employee) -> schemas.EmployeeRead:
         return schemas.EmployeeRead.model_validate(employee)
 
+    async def employee_code_exists(self, employee_code: str) -> bool:
+        return await self.employee_repo.employee_code_exists(employee_code)
+
+    async def department_exists_active(self, department_id: int) -> None:
+        dep = await self.employee_repo.department_exists(department_id)
+        if dep is None:
+            raise BadRequestException("Department not found")
+        if not dep.is_active:
+            raise BadRequestException("Department is inactive")
+
+    async def position_exists_active(self, position_id: int) -> None:
+        pos = await self.employee_repo.position_exists(position_id)
+        if pos is None:
+            raise BadRequestException("Position not found")
+        if not pos.is_active:
+            raise BadRequestException("Position is inactive")
+
+
     async def _validate_references_on_create(self, payload: schemas.EmployeeCreate) -> None:
         if payload.user_id is not None:
             if not await self.employee_repo.user_exists(payload.user_id):
                 raise BadRequestException("User not found")
             if await self.employee_repo.user_linked_to_other_employee(payload.user_id):
                 raise ConflictException("User is already linked to another employee")
+        if payload.employee_code is not None and await self.employee_repo.employee_code_exists(
+            payload.employee_code
+        ):
+            raise ConflictException("Employee code already exists")
 
         if payload.department_id is not None and not await self.employee_repo.department_exists(
             payload.department_id
@@ -79,8 +101,9 @@ class EmployeeService:
         registered_by: uuid.UUID | None = None,
     ) -> schemas.EmployeeRead:
         logger.info(
-            "Create employee request: employee_code=%s full_name=%s registered_by=%s",
+            "Create employee request: employee_code=%s user_id=%s full_name=%s registered_by=%s",
             payload.employee_code,
+            payload.user_id,
             payload.full_name,
             registered_by,
         )
@@ -96,7 +119,11 @@ class EmployeeService:
             payload=payload,
             registered_by=registered_by,
         )
-        logger.info("Employee created: employee_id=%s", employee.employee_id)
+        logger.info(
+            "Employee created: employee_id=%s user_id=%s",
+            employee.employee_id,
+            employee.user_id,
+        )
         return self._to_read(employee)
 
     async def get_employee(self, employee_id: uuid.UUID) -> schemas.EmployeeRead:

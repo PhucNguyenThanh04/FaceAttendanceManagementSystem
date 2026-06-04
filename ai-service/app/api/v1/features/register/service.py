@@ -2,7 +2,7 @@ import asyncio
 import logging
 import numpy as np
 from typing import Optional
-
+from fastapi import Request
 from app.core.pipeline.pipe_processor import PipelineProcessor
 from app.core.configs.settings import settings
 from app.utils.setup_logger import setup_logger
@@ -53,15 +53,13 @@ class RegisterService:
 
             existing.append(new_emb)
             self._pending[session_id] = existing
-            count = len(existing)   # lưu trong lock → chính xác
+            count = len(existing)
 
         return schemas_register.AddPhotoResponse(
             accepted=True,
             count=count,
             quality_score=result.get("quality_score"),
         )
-
-    # ── Commit ────────────────────────────────────────────────────────────────
 
     async def commit(
         self,
@@ -125,3 +123,8 @@ class RegisterService:
 
     async def count_vectors(self, staff_id: str) -> int:
         return await self.vectordb.count_by_staff_id(staff_id)
+
+
+def get_register_service(request: Request):
+    return request.app.state.register_service
+

@@ -61,17 +61,17 @@ class EmployeeRepo:
             stmt = stmt.where(Employee.employee_id != exclude_employee_id)
         return (await self.db.execute(stmt)).first() is not None
 
-    async def department_exists(self, department_id: int | None) -> bool:
+    async def department_exists(self, department_id: int | None) -> Department | None:
         if department_id is None:
-            return False
-        stmt = select(Department.department_id).where(Department.department_id == department_id)
-        return (await self.db.execute(stmt)).first() is not None
+            return None
+        stmt = select(Department).where(Department.department_id == department_id)
+        return await self.db.scalar(stmt)
 
-    async def position_exists(self, position_id: int | None) -> bool:
+    async def position_exists(self, position_id: int | None) -> Position | None:
         if position_id is None:
-            return False
-        stmt = select(Position.position_id).where(Position.position_id == position_id)
-        return (await self.db.execute(stmt)).first() is not None
+            return None
+        stmt = select(Position).where(Position.position_id == position_id)
+        return await self.db.scalar(stmt)
 
     async def manager_exists(self, manager_id: uuid.UUID | None) -> bool:
         if manager_id is None:

@@ -36,16 +36,17 @@ async def get_department(
     service: DepartmentService = Depends(get_department_service),
     _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
 ) -> schemas.DepartmentRead:
-    return await service.get_department(department_id)
+    return await service.get_department_by_id(department_id)
 
 
 @router.get("/", response_model=list[schemas.DepartmentRead])
 async def list_departments(
     search: str | None = None,
+    is_active: bool | None = None,
     service: DepartmentService = Depends(get_department_service),
     _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
 ) -> list[schemas.DepartmentRead]:
-    return await service.list(search)
+    return await service.list(search=search, is_active=is_active)
 
 
 @router.patch("/{department_id}", response_model=schemas.DepartmentRead)

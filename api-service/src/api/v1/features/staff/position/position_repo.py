@@ -56,8 +56,14 @@ class PositionRepo:
     async def get_position_by_code(self, code: str) -> Position | None:
         return await self.db.scalar(select(Position).where(Position.code == code.strip()))
 
-    async def list_positions(self, search: str | None = None) -> list[Position]:
+    async def list_positions(
+        self,
+        search: str | None = None,
+        is_active: bool | None = None,
+    ) -> list[Position]:
         stmt: Select = select(Position)
+        if is_active is not None:
+            stmt = stmt.where(Position.is_active.is_(is_active))
         if search:
             term = search.strip().lower()
             if term:

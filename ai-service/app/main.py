@@ -8,7 +8,9 @@ from qdrant_client import AsyncQdrantClient
 from app.core.vector_db.qdrant_repo import Vectordb
 from app.core.configs.settings import settings
 from app.core.pipeline.pipe_processor import PipelineProcessor
+from app.core.pipeline.attendance_pipline import AttendancePipeline
 from app.api.v1.features.register.service import RegisterService
+
 
 from app.api.v1.router import api_router
 
@@ -60,13 +62,21 @@ async def lifespan(app: FastAPI):
     await vectordb.create_collection()
     logger.info("Vectordb ready (collection=%s)", settings.qdrant_collection_name)
 
+    register_service = RegisterService(pipeline=pipeline, vectordb=vectordb)
+    attendance_pipeline = AttendancePipeline(
+        pipline=pipeline,
+        vectordb=vectordb,
+        camera_url=settings.stream_url,
+        loop=loop,
+    )
+
 
     # 4. Services — pipeline truyền vào service, không expose ra app.state
-    #    enrollment_service là singleton → _pending dict sống suốt vòng đời app
     app.state.qdrant = qdrant   # health check cần dùng trực tiếp
-    app.state.register_service = RegisterService(pipeline=pipeline, vectordb=vectordb)
-    # app.state.attendance_service = AttendanceService(pipeline, qdrant, ...)
-    # app.state.camera_service     = CameraService(...)
+    app.state.register_service = register_service
+    app.state.attendance_worker = attendance_pipeline
+
+    attendance_pipeline.start()
 
     logger.info("AI server ready")
 
@@ -76,7 +86,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down AI server...")
 
     # 1. Dừng worker trước — tránh worker gọi pipeline trong khi executor đóng
-    # attendance_service.stop()
+    await attendance_pipeline.stop()
 
     # 2. Chờ các ML thread đang chạy hoàn thành — tránh kill giữa chừng
     executor.shutdown(wait=True)

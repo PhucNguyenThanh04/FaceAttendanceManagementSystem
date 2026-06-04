@@ -33,16 +33,17 @@ async def get_position(
     service: PositionService = Depends(get_position_service),
     _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
 ) -> schemas.PositionRead:
-    return await service.get_position(position_id)
+    return await service.get_position_by_id(position_id)
 
 
 @router.get("/", response_model=list[schemas.PositionRead])
 async def list_positions(
     search: str | None = None,
+    is_active: bool | None = None,
     service: PositionService = Depends(get_position_service),
     _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
 ) -> list[schemas.PositionRead]:
-    return await service.list(search)
+    return await service.list(search=search, is_active=is_active)
 
 
 @router.patch("/{position_id}", response_model=schemas.PositionRead)

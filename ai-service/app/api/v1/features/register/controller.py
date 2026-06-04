@@ -2,8 +2,8 @@ import cv2
 import numpy as np
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 
-from app.core.dependencies.dep import verify_api_key, get_register_service
-from app.api.v1.features.register.service import RegisterService
+from app.core.dependencies.dep import verify_api_key
+from app.api.v1.features.register.service import RegisterService, get_register_service
 from app.api.v1.features.register import schemas as schemas_register
 from app.core.vector_db import schemas as schemas_vector
 

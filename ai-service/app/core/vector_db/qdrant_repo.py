@@ -44,6 +44,7 @@ class Vectordb:
         payload: vector_schemas.PayloadCreateRequest,
     ) -> List[str]:
         created_at = payload.created_at or datetime.now(timezone.utc).isoformat()
+        updated_at = payload.updated_at or created_at
 
         points= []
         vector_ids = []
@@ -61,8 +62,13 @@ class Vectordb:
                         "face_profile_id":   payload.face_profile_id,
                         "employee_code":     payload.employee_code,
                         "status":            payload.status,
+                        "profile_status":    payload.profile_status,
                         "embedding_version": payload.embedding_version,
+                        "department_id":     payload.department_id,
+                        "position_id":       payload.position_id,
+                        "is_active":         payload.is_active,
                         "created_at":        created_at,
+                        "updated_at":        updated_at,
                     },
                 )
             )
@@ -149,6 +155,7 @@ class Vectordb:
         if not payload_dict:
             logger.warning("Không có trường nào để cập nhật")
             return 0
+        payload_dict.setdefault("updated_at", datetime.now(timezone.utc).isoformat())
 
         await self.client.set_payload(
             collection_name=self.collection_name,
@@ -179,8 +186,13 @@ class Vectordb:
                 face_profile_id=p.payload["face_profile_id"],
                 employee_code=p.payload.get("employee_code") or p.payload.get("username") or "",
                 status=p.payload["status"],
+                profile_status=p.payload.get("profile_status"),
                 embedding_version=p.payload["embedding_version"],
+                department_id=p.payload.get("department_id"),
+                position_id=p.payload.get("position_id"),
+                is_active=p.payload.get("is_active", p.payload.get("status") == "active"),
                 created_at=p.payload["created_at"],
+                updated_at=p.payload.get("updated_at"),
                 score=p.score,
                 qdrant_id=str(p.id),
             )

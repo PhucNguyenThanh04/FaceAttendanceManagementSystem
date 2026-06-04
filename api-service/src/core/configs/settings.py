@@ -17,6 +17,8 @@ class Setting(BaseSettings):
     ai_service_base_url: str
     face_service_api_key: str
 
+    session_ttl_seconds: int
+
     # Database
     database_url: str
     database_port: int
@@ -59,14 +61,14 @@ class Setting(BaseSettings):
     # JWT / Auth
     jwt_secret_key: str
     refresh_token_secret_key: str
-    jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 15
-    refresh_token_expire_days: int = 14
+    jwt_algorithm: str
+    access_token_expire_minutes: int
+    refresh_token_expire_days: int
 
     # Auth rate limit
-    login_rate_limit_ip_max_attempts: int = 20
-    login_rate_limit_user_max_attempts: int = 5
-    login_rate_limit_window_seconds: int = 900
+    login_rate_limit_ip_max_attempts: int 
+    login_rate_limit_user_max_attempts: int
+    login_rate_limit_window_seconds: int
 
     # Password reset / OTP
     password_reset_token_expire_minutes: int = 15

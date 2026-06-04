@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     workers: int
     gpu_id: int
     api_key: str
+    debug: bool = True
+
 
     log_level: str = "INFO"
 

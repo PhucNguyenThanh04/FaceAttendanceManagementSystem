@@ -58,8 +58,14 @@ class DepartmentRepo:
     async def get_department_by_code(self, code: str) -> Department | None:
         return await self.db.scalar(select(Department).where(Department.code == code.strip()))
 
-    async def list_departments(self, search: str | None = None) -> list[Department]:
+    async def list_departments(
+        self,
+        search: str | None = None,
+        is_active: bool | None = None,
+    ) -> list[Department]:
         stmt: Select = select(Department)
+        if is_active is not None:
+            stmt = stmt.where(Department.is_active.is_(is_active))
         if search:
             term = search.strip().lower()
             if term:

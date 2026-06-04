@@ -45,13 +45,24 @@ class MJPEGHandler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
+def _center_crop_square(frame):
+    h, w = frame.shape[:2]
+    size = min(w, h)
 
-def _capture_loop(video_path: str, fps : float):
+    x1 = (w - size) // 2
+    y1 = (h - size) // 2
+
+    return frame[y1:y1 + size, x1:x1 + size]
+
+
+def _capture_loop(video_path: str, fps: float):
     delay = 1.0 / fps
+
     while True:
         cap = cv2.VideoCapture(0)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 640)
+
         if not cap.isOpened():
             raise FileNotFoundError(f"khong mo duoc video: {video_path}")
 
@@ -59,13 +70,19 @@ def _capture_loop(video_path: str, fps : float):
             ret, frame = cap.read()
             if not ret:
                 break
+
             frame = cv2.flip(frame, 1)
+            frame = _center_crop_square(frame)
+            frame = cv2.resize(frame, (640, 640), interpolation=cv2.INTER_AREA)
+            print(frame.shape)
 
             with MJPEGHandler._lock:
                 MJPEGHandler._frame = frame
 
             time.sleep(delay)
+
         cap.release()
+
 
 
 def start_server(video_path: str, host: str ,

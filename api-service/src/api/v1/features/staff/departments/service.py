@@ -45,7 +45,7 @@ class DepartmentService:
         )
         return self._to_read(department)
 
-    async def get_department(self, department_id: int) -> schemas.DepartmentRead:
+    async def get_department_by_id(self, department_id: int) -> schemas.DepartmentRead:
         department = await self.department_repo.get_department_by_id(department_id)
         if department is None:
             logger.warning("Department not found by id: department_id=%s", department_id)
@@ -59,11 +59,19 @@ class DepartmentService:
             raise NotFoundException("Department")
         return self._to_read(department)
 
-    async def list(self, search: str | None = None) -> list[schemas.DepartmentRead]:
-        departments = await self.department_repo.list_departments(search=search)
+    async def list(
+        self,
+        search: str | None = None,
+        is_active: bool | None = None,
+    ) -> list[schemas.DepartmentRead]:
+        departments = await self.department_repo.list_departments(
+            search=search,
+            is_active=is_active,
+        )
         logger.info(
-            "List departments: search=%s count=%s",
+            "List departments: search=%s is_active=%s count=%s",
             search,
+            is_active,
             len(departments),
         )
         return [self._to_read(department) for department in departments]

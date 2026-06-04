@@ -12,7 +12,7 @@ GENDER_ALLOWED = {"male", "female", "other"}
 
 
 class EmployeeBase(BaseModel):
-    employee_code: str | None = Field(default=None, min_length=1, max_length=50)
+    employee_code: str = Field(..., min_length=1, max_length=50)
     full_name: str = Field(..., min_length=1, max_length=120)
     phone: str | None = Field(default=None, pattern=PHONE_PATTERN)
     avatar_url: str | None = Field(default=None, max_length=500)
@@ -46,6 +46,7 @@ class EmployeeBase(BaseModel):
 
 
 class EmployeeCreate(EmployeeBase):
+    employee_code: str | None = Field(default=None, min_length=1, max_length=50)
     user_id: uuid.UUID | None = None
 
 

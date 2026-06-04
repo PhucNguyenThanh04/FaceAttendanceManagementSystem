@@ -6,6 +6,8 @@ from src.api.v1.features.users import schemas as user_schemas
 from src.api.v1.features.users.user_repo import UserRepo, get_user_repo
 from src.core.security.authentication import hash_password, verify_password
 from src.utils.exeptions import BadRequestException, ConflictException, NotFoundException
+from src.api.v1.shared.enums import RoleName, UserStatus
+
 from src.utils.setup_logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -19,20 +21,19 @@ class UserService:
     def _to_read(user) -> user_schemas.UserRead:
         return user_schemas.UserRead.model_validate(user)
 
-    async def create_user(self, payload: user_schemas.UserCreate) -> user_schemas.UserRead:
-        logger.info("Create user request: email=%s role=%s", payload.email, payload.role_name)
-        if await self.user_repo.email_exists(payload.email):
-            logger.warning("Create user conflict: email=%s", payload.email)
+    async def email_exists(self, email: str) -> bool:
+        return await self.user_repo.email_exists(email)
+
+    async def create_user(self, email: str, password_hash: str, role_name: RoleName, status: UserStatus) -> user_schemas.UserRead :
+        if await self.email_exists(email=email):
             raise ConflictException("Email already exists")
 
-        password_hash = hash_password(payload.password)
         user = await self.user_repo.create_user(
-            email=payload.email,
+            email=email,
             password_hash=password_hash,
-            role_name=payload.role_name,
-            status=payload.status,
+            role_name=role_name,
+            status=status,
         )
-        logger.info("User created: user_id=%s email=%s", user.user_id, user.email)
         return self._to_read(user)
 
     async def get_user(self, user_id: UUID) -> user_schemas.UserRead:

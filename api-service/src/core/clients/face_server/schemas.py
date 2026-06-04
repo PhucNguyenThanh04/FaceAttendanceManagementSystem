@@ -30,8 +30,13 @@ class AIPayloadCreateRequest(BaseModel):
     face_profile_id: str = Field(..., min_length=1, max_length=120)
     employee_code: str = Field(..., min_length=1, max_length=120)
     status: str = Field(default="active", min_length=1, max_length=50)
+    profile_status: str = Field(default="active", min_length=1, max_length=50)
     embedding_version: str = Field(default=EMBEDDING_VERSION, min_length=1, max_length=120)
+    department_id: int | None = None
+    position_id: int | None = None
+    is_active: bool = True
     created_at: str | None = None
+    updated_at: str | None = None
 
 
 class AIEnrollPhotoParams(BaseModel):

@@ -38,16 +38,28 @@ class PositionService:
         )
         return self._to_read(position)
 
-    async def get_position(self, position_id: int) -> schemas.PositionRead:
+    async def get_position_by_id(self, position_id: int) -> schemas.PositionRead:
         position = await self.position_repo.get_position_by_id(position_id)
         if position is None:
             logger.warning("Position not found by id: position_id=%s", position_id)
             raise NotFoundException("Position")
         return self._to_read(position)
 
-    async def list(self, search: str | None = None) -> list[schemas.PositionRead]:
-        positions = await self.position_repo.list_positions(search=search)
-        logger.info("List positions: search=%s count=%s", search, len(positions))
+    async def list(
+        self,
+        search: str | None = None,
+        is_active: bool | None = None,
+    ) -> list[schemas.PositionRead]:
+        positions = await self.position_repo.list_positions(
+            search=search,
+            is_active=is_active,
+        )
+        logger.info(
+            "List positions: search=%s is_active=%s count=%s",
+            search,
+            is_active,
+            len(positions),
+        )
         return [self._to_read(position) for position in positions]
 
     async def update_position(self, position_id: int, payload: schemas.PositionUpdate) -> schemas.PositionRead:

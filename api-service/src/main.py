@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import httpx
 import logging
 from redis.exceptions import AuthenticationError
@@ -17,6 +19,8 @@ from src.utils.exeptions import app_exception_handler, AppException
 from src.api.v1.routers import api_router
 
 logger = setup_logger(__name__, level=logging.DEBUG if settings.debug else logging.INFO)
+UPLOADS_DIR = Path(__file__).resolve().parents[1] / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def parse_cors_origins(raw_origins: str) -> list[str]:
@@ -101,6 +105,7 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api/v1")
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 
 # ── Health check ──────────────────────────────────────────────────────────

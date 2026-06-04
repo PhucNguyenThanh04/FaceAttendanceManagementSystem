@@ -108,3 +108,7 @@ class FaceServerClient:
         response.raise_for_status()
         logger.debug(f"HTTP {method} {path} | status={response.status_code} | response={response.text}")
         return response.json()
+
+
+def get_face_server_client(http_client: httpx.AsyncClient) -> FaceServerClient:
+    return FaceServerClient(http_client)

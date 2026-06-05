@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     model_dir_antispoof: str
     ml_device: int
 
+    attendance_enabled: bool = False
     attendance_cooldown_seconds: int
     attendance_recognized_pause_seconds: float
     attendance_recognition_result_max_age_seconds: float

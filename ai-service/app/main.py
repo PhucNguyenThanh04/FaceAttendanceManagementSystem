@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from qdrant_client import AsyncQdrantClient
+from app.core.clients.api_server import ApiServerClient
 from app.core.vector_db.qdrant_repo import Vectordb
 from app.core.configs.settings import settings
 from app.core.pipeline.pipe_processor import PipelineProcessor
@@ -63,11 +64,13 @@ async def lifespan(app: FastAPI):
     logger.info("Vectordb ready (collection=%s)", settings.qdrant_collection_name)
 
     register_service = RegisterService(pipeline=pipeline, vectordb=vectordb)
+    api_server_client = ApiServerClient()
     attendance_pipeline = AttendancePipeline(
         pipline=pipeline,
         vectordb=vectordb,
         camera_url=settings.stream_url,
         loop=loop,
+        api_client=api_server_client,
     )
 
 
@@ -75,8 +78,12 @@ async def lifespan(app: FastAPI):
     app.state.qdrant = qdrant   # health check cần dùng trực tiếp
     app.state.register_service = register_service
     app.state.attendance_worker = attendance_pipeline
+    app.state.api_server_client = api_server_client
 
-    attendance_pipeline.start()
+    if settings.attendance_enabled:
+        attendance_pipeline.start()
+    else:
+        logger.info("Attendance worker disabled")
 
     logger.info("AI server ready")
 
@@ -87,6 +94,8 @@ async def lifespan(app: FastAPI):
 
     # 1. Dừng worker trước — tránh worker gọi pipeline trong khi executor đóng
     await attendance_pipeline.stop()
+    await api_server_client.close()
+    logger.info("api-service client closed")
 
     # 2. Chờ các ML thread đang chạy hoàn thành — tránh kill giữa chừng
     executor.shutdown(wait=True)

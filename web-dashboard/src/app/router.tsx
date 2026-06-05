@@ -10,6 +10,7 @@ import { DashboardPage } from '@/features/dashboard/pages/DashboardPage'
 import { EmployeeListPage } from '@/features/employees/pages/EmployeeListPage'
 import { DepartmentListPage } from '@/features/departments/pages/DepartmentListPage'
 import { PositionListPage } from '@/features/positions/pages/PositionListPage'
+import { ShiftManagementPage } from '@/features/shifts/pages/ShiftManagementPage'
 import { FaceProfileListPage } from '@/features/face-profiles/pages/FaceProfileListPage'
 import { EmployeeOnboardingPage } from '@/features/employee-onboarding/pages/EmployeeOnboardingPage'
 import { AttendancePage } from '@/features/attendance/pages/AttendancePage'
@@ -48,6 +49,7 @@ export const router = createBrowserRouter([
           { path: routeSegments.employees, element: withRoles(staffDashboard, <EmployeeListPage />) },
           { path: routeSegments.departments, element: withRoles(adminHr, <DepartmentListPage />) },
           { path: routeSegments.positions, element: withRoles(adminHr, <PositionListPage />) },
+          { path: routeSegments.shifts, element: withRoles(staffDashboard, <ShiftManagementPage />) },
           { path: routeSegments.faceProfiles, element: withRoles(adminHr, <FaceProfileListPage />) },
           { path: routeSegments.onboarding, element: withRoles(adminHr, <EmployeeOnboardingPage />) },
           { path: routeSegments.attendance, element: withRoles(staffDashboard, <AttendancePage />) },

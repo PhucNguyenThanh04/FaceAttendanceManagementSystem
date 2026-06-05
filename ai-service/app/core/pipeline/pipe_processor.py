@@ -68,6 +68,21 @@ class PipelineProcessor:
         logger.debug("[attendance] skip frame: %s", result["reason"])
         return None
 
+    def try_get_embedding(self, image: np.ndarray) -> tuple[bool, Optional[np.ndarray]]:
+        acquired = self._lock.acquire(blocking=False)
+        if not acquired:
+            return False, None
+
+        try:
+            result = self._run_pipeline(image)
+        finally:
+            self._lock.release()
+
+        if result["valid"]:
+            return True, result["embedding"]
+        logger.debug("[attendance] skip frame: %s", result["reason"])
+        return True, None
+
     def warmup(self, iterations: int = 2) -> None:
 
         if iterations < 1:

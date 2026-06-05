@@ -34,6 +34,15 @@ class AttendanceEventCreate(AttendanceEventBase):
     pass
 
 
+class AttendanceAIEventCreate(BaseModel):
+    employee_id: uuid.UUID
+    event_time: datetime | None = None
+    confidence_score: float | None = Field(default=None, ge=0, le=1)
+    anti_spoof_score: float | None = Field(default=None, ge=0, le=1)
+    image_url: str | None = Field(default=None, max_length=500)
+    raw_result: dict | None = None
+
+
 class AttendanceEventRead(AttendanceEventBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -90,6 +99,24 @@ class AttendanceRecordRead(AttendanceRecordBase):
     record_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
+
+
+class AttendanceEventAcceptedResponse(BaseModel):
+    accepted: bool
+    reason: str | None = None
+    employee_id: uuid.UUID
+    event_id: uuid.UUID | None = None
+    record_id: uuid.UUID | None = None
+    event_type: AttendanceEventType | None = None
+    event_time: datetime
+    work_date: date | None = None
+    check_in_time: datetime | None = None
+    check_out_time: datetime | None = None
+    late_minutes: int | None = None
+    early_leave_minutes: int | None = None
+    worked_minutes: int | None = None
+    status: AttendanceRecordStatus | None = None
+    cooldown_ttl_seconds: int | None = None
 
 
 class AttendanceRecordListQuery(BaseModel):

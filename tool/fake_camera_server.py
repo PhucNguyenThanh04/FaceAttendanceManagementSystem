@@ -74,7 +74,6 @@ def _capture_loop(video_path: str, fps: float):
             frame = cv2.flip(frame, 1)
             frame = _center_crop_square(frame)
             frame = cv2.resize(frame, (640, 640), interpolation=cv2.INTER_AREA)
-            print(frame.shape)
 
             with MJPEGHandler._lock:
                 MJPEGHandler._frame = frame

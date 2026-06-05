@@ -73,6 +73,18 @@ class EmployeeShiftAssignmentCreate(EmployeeShiftAssignmentBase):
     created_by: uuid.UUID | None = None
 
 
+class EmployeeShiftAssignmentCreateForEmployee(BaseModel):
+    shift_id: int = Field(..., ge=1)
+    effective_date: date
+    end_date: date | None = None
+
+    @model_validator(mode="after")
+    def validate_effective_window(self) -> "EmployeeShiftAssignmentCreateForEmployee":
+        if self.end_date and self.end_date < self.effective_date:
+            raise ValueError("end_date must be on/after effective_date")
+        return self
+
+
 class EmployeeShiftAssignmentUpdate(BaseModel):
     shift_id: int | None = Field(default=None, ge=1)
     effective_date: date | None = None
@@ -85,6 +97,12 @@ class EmployeeShiftAssignmentUpdate(BaseModel):
         return self
 
 
+class ChangeShiftPayload(BaseModel):
+    new_shift_id: int = Field(..., ge=1)
+    effective_date: date
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class EmployeeShiftAssignmentRead(EmployeeShiftAssignmentBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -92,6 +110,14 @@ class EmployeeShiftAssignmentRead(EmployeeShiftAssignmentBase):
     created_by: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class CurrentShiftRead(BaseModel):
+    assignment_id: int
+    employee_id: uuid.UUID
+    effective_date: date
+    end_date: date | None = None
+    shift: WorkShiftRead
 
 
 class HolidayBase(BaseModel):

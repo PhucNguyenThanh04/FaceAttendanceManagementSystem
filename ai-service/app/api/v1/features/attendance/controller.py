@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 
-from app.core.dependencies.dep import verify_api_key
 from app.core.pipeline.attendance_pipline import AttendancePipeline
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
@@ -46,7 +45,10 @@ async def stop_attendance(request: Request) -> dict:
 
 
 @router.get("/stream")
-async def attendance_stream(request: Request, fps: float = 10.0) -> StreamingResponse:
+async def attendance_stream(
+    request: Request,
+    fps: float = Query(default=10.0, ge=1.0, le=30.0),
+) -> StreamingResponse:
     worker = get_attendance_worker(request)
     frame_delay = 1.0 / max(float(fps), 1.0)
 

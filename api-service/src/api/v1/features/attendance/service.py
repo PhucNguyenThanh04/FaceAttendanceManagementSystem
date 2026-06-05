@@ -28,7 +28,7 @@ REASON_ATTENDANCE_ALREADY_COMPLETED = "ATTENDANCE_ALREADY_COMPLETED"
 
 
 class AttendanceService:
-    def __init__(self, attendance_repo: AttendanceRepo, redis_client: Redis):
+    def __init__(self, attendance_repo: AttendanceRepo, redis_client: Redis | None):
         self.attendance_repo = attendance_repo
         self.redis = redis_client
 
@@ -103,6 +103,8 @@ class AttendanceService:
     ) -> schemas.AttendanceEventAcceptedResponse:
         event_time = self._normalize_event_time(payload.event_time)
         employee_id = payload.employee_id
+        if self.redis is None:
+            raise RuntimeError("Redis client is required to create attendance events")
 
         if not await self.attendance_repo.employee_exists(employee_id):
             logger.warning("Attendance event employee not found: employee_id=%s", employee_id)
@@ -263,3 +265,9 @@ def get_attendance_service(
     redis_client: Redis = Depends(get_redis_client),
 ) -> AttendanceService:
     return AttendanceService(attendance_repo=attendance_repo, redis_client=redis_client)
+
+
+def get_attendance_read_service(
+    attendance_repo: AttendanceRepo = Depends(get_attendance_repo),
+) -> AttendanceService:
+    return AttendanceService(attendance_repo=attendance_repo, redis_client=None)

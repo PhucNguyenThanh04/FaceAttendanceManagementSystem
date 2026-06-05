@@ -3,11 +3,12 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from src.api.v1.features.attendance import schemas
 from src.api.v1.features.attendance.service import (
     AttendanceService,
+    get_attendance_read_service,
     get_attendance_service,
 )
 from src.api.v1.features.users.models import User
@@ -27,14 +28,14 @@ async def create_attendance_event(
 
 @router.get("/events", response_model=list[schemas.AttendanceEventRead])
 async def list_attendance_events(
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=200),
     employee_id: uuid.UUID | None = None,
     event_type: AttendanceEventType | None = None,
     accepted: bool | None = None,
     event_time_from: datetime | None = None,
     event_time_to: datetime | None = None,
-    service: AttendanceService = Depends(get_attendance_service),
+    service: AttendanceService = Depends(get_attendance_read_service),
     _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
 ) -> list[schemas.AttendanceEventRead]:
     query = schemas.AttendanceEventListQuery(
@@ -52,7 +53,7 @@ async def list_attendance_events(
 @router.get("/events/{event_id}", response_model=schemas.AttendanceEventRead)
 async def get_attendance_event(
     event_id: uuid.UUID,
-    service: AttendanceService = Depends(get_attendance_service),
+    service: AttendanceService = Depends(get_attendance_read_service),
     _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
 ) -> schemas.AttendanceEventRead:
     return await service.get_event(event_id)

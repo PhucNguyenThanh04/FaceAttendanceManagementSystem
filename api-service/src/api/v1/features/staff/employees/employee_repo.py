@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import Depends
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.api.v1.features.staff.employees import schemas
 from src.api.v1.features.staff.models import Department, Employee, Position
-from src.api.v1.shared.enums import EmployeeStatus
+from src.api.v1.features.face_profiles.models import FaceProfile
+from src.api.v1.shared.enums import EmployeeStatus, FaceProfileStatus, UserStatus
 from src.api.v1.features.users.models import User
 from src.core.db.database import get_db
 from src.utils.exeptions import ConflictException, DatabaseException, NotFoundException
@@ -80,7 +82,15 @@ class EmployeeRepo:
         return (await self.db.execute(stmt)).first() is not None
 
     async def get_employee_by_id(self, employee_id: uuid.UUID) -> Employee | None:
-        return await self.db.scalar(select(Employee).where(Employee.employee_id == employee_id))
+        stmt = (
+            select(Employee)
+            .options(
+                selectinload(Employee.face_profile),
+                selectinload(Employee.user),
+            )
+            .where(Employee.employee_id == employee_id)
+        )
+        return await self.db.scalar(stmt)
 
     async def get_employee_or_404(self, employee_id: uuid.UUID) -> Employee:
         employee = await self.get_employee_by_id(employee_id)
@@ -90,8 +100,28 @@ class EmployeeRepo:
 
     async def get_employee_by_code(self, employee_code: str) -> Employee | None:
         return await self.db.scalar(
-            select(Employee).where(Employee.employee_code == employee_code.strip())
+            select(Employee)
+            .options(
+                selectinload(Employee.face_profile),
+                selectinload(Employee.user),
+            )
+            .where(Employee.employee_code == employee_code.strip())
         )
+
+    async def get_face_profile_by_employee_id(
+        self,
+        employee_id: uuid.UUID,
+    ) -> FaceProfile | None:
+        return await self.db.scalar(
+            select(FaceProfile).where(FaceProfile.employee_id == employee_id)
+        )
+
+    async def employee_has_active_face_profile(self, employee_id: uuid.UUID) -> bool:
+        stmt = select(FaceProfile.profile_id).where(
+            FaceProfile.employee_id == employee_id,
+            FaceProfile.status == FaceProfileStatus.active,
+        )
+        return (await self.db.execute(stmt)).first() is not None
 
     async def list_employees(
         self,
@@ -202,6 +232,9 @@ class EmployeeRepo:
         self,
         employee_id: uuid.UUID,
         payload: schemas.EmployeeUpdate,
+        *,
+        deactivate_linked_entities: bool = False,
+        deactivation_reason: str | None = None,
     ) -> Employee:
         employee = await self.get_employee_or_404(employee_id)
         changed = False
@@ -246,6 +279,12 @@ class EmployeeRepo:
                 setattr(employee, field, new_value)
                 changed = True
 
+        if deactivate_linked_entities:
+            changed = self._apply_deactivation_side_effects(
+                employee=employee,
+                reason=deactivation_reason or "Employee deactivated",
+            ) or changed
+
         if changed:
             try:
                 await self.db.commit()
@@ -262,25 +301,54 @@ class EmployeeRepo:
             raise DatabaseException("Failed to reload updated employee")
         return updated
 
-    async def delete_employee(self, employee_id: uuid.UUID) -> None:
-        employee = await self.get_employee_or_404(employee_id)
-        try:
-            await self.db.delete(employee)
-            await self.db.commit()
-        except Exception as exc:
-            await self.db.rollback()
-            logger.exception(
-                "Failed to delete employee: employee_id=%s",
-                employee_id,
-            )
-            raise DatabaseException("Failed to delete employee") from exc
+    def _apply_deactivation_side_effects(
+        self,
+        *,
+        employee: Employee,
+        reason: str,
+    ) -> bool:
+        changed = False
+        now = datetime.now(timezone.utc)
 
-    async def deactivate_employee(self, employee_id: uuid.UUID) -> Employee:
-        employee = await self.get_employee_or_404(employee_id)
-        if employee.status == EmployeeStatus.inactive:
-            return employee
+        if employee.status not in {EmployeeStatus.inactive, EmployeeStatus.resigned}:
+            employee.status = EmployeeStatus.inactive
+            changed = True
 
-        employee.status = EmployeeStatus.inactive
+        if employee.user is not None:
+            user_changed = False
+            if employee.user.status != UserStatus.inactive:
+                employee.user.status = UserStatus.inactive
+                user_changed = True
+            if (
+                employee.user.refresh_token_hash is not None
+                or employee.user.refresh_token_expires_at is not None
+                or employee.user.refresh_token_created_at is not None
+            ):
+                employee.user.refresh_token_hash = None
+                employee.user.refresh_token_expires_at = None
+                employee.user.refresh_token_created_at = None
+                user_changed = True
+            if user_changed:
+                employee.user.token_version += 1
+                changed = True
+
+        if employee.face_profile is not None and employee.face_profile.status != FaceProfileStatus.revoked:
+            employee.face_profile.status = FaceProfileStatus.revoked
+            employee.face_profile.revocation_reason = reason
+            employee.face_profile.revoked_at = now
+            changed = True
+
+        return changed
+
+    async def soft_delete_employee_with_links(
+        self,
+        employee_id: uuid.UUID,
+        *,
+        reason: str,
+    ) -> Employee:
+        employee = await self.get_employee_or_404(employee_id)
+        self._apply_deactivation_side_effects(employee=employee, reason=reason)
+
         try:
             await self.db.commit()
             await self.db.refresh(employee)
@@ -288,10 +356,36 @@ class EmployeeRepo:
         except Exception as exc:
             await self.db.rollback()
             logger.exception(
-                "Failed to deactivate employee: employee_id=%s",
+                "Failed to soft delete employee with links: employee_id=%s",
                 employee_id,
             )
-            raise DatabaseException("Failed to deactivate employee") from exc
+            raise DatabaseException("Failed to delete employee") from exc
+
+    async def hard_delete_employee(self, employee_id: uuid.UUID) -> None:
+        employee = await self.db.scalar(
+            select(Employee).where(Employee.employee_id == employee_id)
+        )
+        if employee is None:
+            raise NotFoundException("Employee")
+        try:
+            await self.db.execute(
+                delete(FaceProfile).where(FaceProfile.employee_id == employee_id)
+            )
+            await self.db.delete(employee)
+            await self.db.commit()
+        except Exception as exc:
+            await self.db.rollback()
+            logger.exception(
+                "Failed to hard delete employee: employee_id=%s",
+                employee_id,
+            )
+            raise DatabaseException("Failed to delete employee") from exc
+
+    async def deactivate_employee(self, employee_id: uuid.UUID) -> Employee:
+        return await self.soft_delete_employee_with_links(
+            employee_id,
+            reason="Employee deactivated",
+        )
 
 
 def get_employee_repo(db: AsyncSession = Depends(get_db)) -> EmployeeRepo:

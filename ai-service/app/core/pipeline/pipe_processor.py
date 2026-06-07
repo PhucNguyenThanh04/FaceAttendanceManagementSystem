@@ -23,18 +23,26 @@ logger = setup_logger(__name__)
 class QualityThreshold:
     FACE_MIN_SIZE = 60     # pixel
     DET_SCORE_MIN = 0.65
-    BLUR_MIN = 30.0   # Laplacian variance
+    BLUR_MIN = 0.0   # Laplacian variance
     BRIGHTNESS_MIN = 50.0
     BRIGHTNESS_MAX = 230.0
-    YAW_MAX = 45.0
-    QUALITY_SCORE_MIN = 0.5
+    YAW_MAX = 65.0
+    QUALITY_SCORE_MIN = 0.1
 
 
-def _fail(stage: str, reason: str) -> dict:
-    return {"valid": False, "stage": stage, "reason": reason}
+def _fail(stage: str, reason: str, bbox: list[int] | None = None) -> dict:
+    result = {"valid": False, "stage": stage, "reason": reason}
+    if bbox is not None:
+        result["bbox"] = bbox
+    return result
 
-def _ok(embedding: np.ndarray, quality_score: float) -> dict:
-    return {"valid": True, "embedding": embedding, "quality_score": quality_score}
+def _ok(embedding: np.ndarray, quality_score: float, bbox: list[int]) -> dict:
+    return {
+        "valid": True,
+        "embedding": embedding,
+        "quality_score": quality_score,
+        "bbox": bbox,
+    }
 
 class PipelineProcessor:
 
@@ -69,19 +77,31 @@ class PipelineProcessor:
         return None
 
     def try_get_embedding(self, image: np.ndarray) -> tuple[bool, Optional[np.ndarray]]:
+        acquired, embedding, _ = self.try_get_embedding_with_bbox(image)
+        return acquired, embedding
+
+    def try_run_pipeline(self, image: np.ndarray) -> tuple[bool, dict | None]:
         acquired = self._lock.acquire(blocking=False)
         if not acquired:
             return False, None
 
         try:
-            result = self._run_pipeline(image)
+            return True, self._run_pipeline(image)
         finally:
             self._lock.release()
 
+    def try_get_embedding_with_bbox(
+        self,
+        image: np.ndarray,
+    ) -> tuple[bool, Optional[np.ndarray], list[int] | None]:
+        acquired, result = self.try_run_pipeline(image)
+        if not acquired or result is None:
+            return False, None, None
+
         if result["valid"]:
-            return True, result["embedding"]
+            return True, result["embedding"], result.get("bbox")
         logger.debug("[attendance] skip frame: %s", result["reason"])
-        return True, None
+        return True, None, result.get("bbox")
 
     def warmup(self, iterations: int = 2) -> None:
 
@@ -112,6 +132,10 @@ class PipelineProcessor:
         logger.info("Pipeline warmup completed (%d iterations)", iterations)
 
     def _run_pipeline(self, image: np.ndarray) -> dict:
+        if image is None or not isinstance(image, np.ndarray) or image.size == 0 or image.ndim < 2:
+            return _fail("input", "Frame camera không hợp lệ.")
+
+        image_h, image_w = image.shape[:2]
 
         # ── Step 1: Detect ───────────────────────────────────────────────
         detections = self.detector.detect(image)
@@ -122,20 +146,47 @@ class PipelineProcessor:
             return _fail("detect", f"Phát hiện {len(detections)} khuôn mặt — chỉ chấp nhận 1.")
 
         det = detections[0]
-        bbox = det["bbox"]
-        landmarks = np.array(det["kps"], dtype=np.float32)
+        raw_bbox = list(map(int, det["bbox"]))
+        kps = det.get("kps")
+        if kps is None:
+            return _fail("detect", "Detector không trả về landmark khuôn mặt.", raw_bbox)
+
+        landmarks = np.array(kps, dtype=np.float32)
+        if landmarks.shape != (5, 2) or not np.isfinite(landmarks).all():
+            return _fail("detect", "Landmark khuôn mặt không hợp lệ.", raw_bbox)
+
         det_score = float(det["score"])
-        x1, y1, x2, y2 = bbox
+        raw_x1, raw_y1, raw_x2, raw_y2 = raw_bbox
+        x1 = max(0, min(raw_x1, image_w))
+        y1 = max(0, min(raw_y1, image_h))
+        x2 = max(0, min(raw_x2, image_w))
+        y2 = max(0, min(raw_y2, image_h))
+        bbox = [x1, y1, x2, y2]
+
+        if x2 <= x1 or y2 <= y1:
+            return _fail("quality", "Vùng khuôn mặt nằm ngoài khung hình camera.", raw_bbox)
+        if bbox != raw_bbox:
+            logger.debug(
+                "Face bbox clamped to frame bounds: raw=%s clamped=%s frame=%sx%s",
+                raw_bbox,
+                bbox,
+                image_w,
+                image_h,
+            )
+
         face_w, face_h = x2 - x1, y2 - y1
 
         # ── Step 2: Quality check ────────────────────────────────────────
         if face_w < self.thr.FACE_MIN_SIZE or face_h < self.thr.FACE_MIN_SIZE:
-            return _fail("quality", f"Khuôn mặt quá nhỏ ({face_w:.0f}×{face_h:.0f}px) — đứng gần camera hơn.")
+            return _fail("quality", f"Khuôn mặt quá nhỏ ({face_w:.0f}×{face_h:.0f}px) — đứng gần camera hơn.", bbox)
 
         if det_score < self.thr.DET_SCORE_MIN:
-            return _fail("quality", f"Độ tin cậy phát hiện quá thấp ({det_score:.2f}).")
+            return _fail("quality", f"Độ tin cậy phát hiện quá thấp ({det_score:.2f}).", bbox)
 
-        face_crop = image[int(y1):int(y2), int(x1):int(x2)]
+        face_crop = image[y1:y2, x1:x2]
+        if face_crop.size == 0:
+            return _fail("quality", "Vùng khuôn mặt rỗng sau khi cắt ảnh.", bbox)
+
         blur_score = calculate_blur_score(face_crop)
         brightness = calculate_brightness(face_crop)
         pose = estimate_head_pose(landmarks, bbox)
@@ -143,18 +194,18 @@ class PipelineProcessor:
         yaw = pose["yaw"]
 
         if blur_score < self.thr.BLUR_MIN:
-            return _fail("quality", f"Ảnh bị mờ (blur={blur_score:.1f}) — giữ yên camera.")
+            return _fail("quality", f"Ảnh bị mờ (blur={blur_score:.1f}) — giữ yên camera.", bbox)
         if brightness < self.thr.BRIGHTNESS_MIN:
-            return _fail("quality", f"Ảnh quá tối (brightness={brightness:.1f}) — cần thêm ánh sáng.")
+            return _fail("quality", f"Ảnh quá tối (brightness={brightness:.1f}) — cần thêm ánh sáng.", bbox)
         if brightness > self.thr.BRIGHTNESS_MAX:
-            return _fail("quality", f"Ảnh quá sáng (brightness={brightness:.1f}) — giảm ánh sáng.")
+            return _fail("quality", f"Ảnh quá sáng (brightness={brightness:.1f}) — giảm ánh sáng.", bbox)
         # Chỉ chặn khi quay trái/phải quá lớn, không check pitch/roll
         yaw_abs = abs(yaw)
         logger.debug("Pose yaw=%.2f (abs=%.2f, max=%.2f)", yaw, yaw_abs, self.thr.YAW_MAX)
         if yaw_abs > self.thr.YAW_MAX:
-            return _fail("quality", f"Mặt quay ngang quá nhiều (yaw={yaw:.1f}°), vui lòng nhìn thẳng camera hơn.")
+            return _fail("quality", f"Mặt quay ngang quá nhiều (yaw={yaw:.1f}°), vui lòng nhìn thẳng camera hơn.", bbox)
         if occlusion["severe"]:
-            return _fail("quality", "Khuôn mặt bị che khuất.")
+            return _fail("quality", "Khuôn mặt bị che khuất.", bbox)
 
         quality_score = calculate_quality_score({
             "det_score":        det_score,
@@ -165,7 +216,7 @@ class PipelineProcessor:
             "occlusion_score":  occlusion["score"],
         })
         if quality_score < self.thr.QUALITY_SCORE_MIN:
-            return _fail("quality", f"Chất lượng ảnh tổng hợp quá thấp ({quality_score:.2f}).")
+            return _fail("quality", f"Chất lượng ảnh tổng hợp quá thấp ({quality_score:.2f}).", bbox)
 
         # ── Step 3: Anti-spoofing ────────────────────────────────────────
         spoof_result = self.antispoof_manager.check_anti_spoof(image, bbox)
@@ -173,11 +224,11 @@ class PipelineProcessor:
         spoof_conf = float(spoof_result.get("confidence", 0.0))
 
         if not is_real:
-            return _fail("antispoof", f"Phát hiện ảnh giả mạo (confidence={spoof_conf:.2f}).")
+            return _fail("antispoof", f"Phát hiện ảnh giả mạo (confidence={spoof_conf:.2f}).", bbox)
 
         aligned = norm_crop(image, landmarks)
 
         # ── Step 5: Embed ────────────────────────────────────────────────
         embedding = self.embedder.get_embedding(aligned)
 
-        return _ok(embedding, quality_score)
+        return _ok(embedding, quality_score, bbox)

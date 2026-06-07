@@ -201,6 +201,11 @@ class Vectordb:
         gap_threshold: float = 0.04,
     ) -> vector_schemas.PayloadIdentifyResponse:
         candidates = await self.search_vector(vector=vector, top_k=top_k, threshold=threshold)
+        candidates = [
+            candidate
+            for candidate in candidates
+            if candidate.is_active
+        ]
 
         if not candidates:
             return vector_schemas.PayloadIdentifyResponse(status="unknown", person=None)

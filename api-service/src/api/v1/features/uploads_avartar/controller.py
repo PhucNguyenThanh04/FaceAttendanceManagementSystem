@@ -1,10 +1,11 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
+from fastapi import APIRouter, UploadFile, File, Depends
 
 from src.core.dependencies.auth import get_current_user
 from src.api.v1.features.users.models import User
+from src.core.exceptions import BadRequestException
 
 router = APIRouter(prefix="/upload", tags=["Upload"])
 
@@ -20,23 +21,14 @@ MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 async def _save_avatar_image(file: UploadFile) -> dict[str, str]:
     if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only JPG and PNG images are allowed",
-        )
+        raise BadRequestException("Only JPG and PNG images are allowed")
 
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File size must be less than 5MB",
-        )
+        raise BadRequestException("File size must be less than 5MB")
 
     if not content:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Empty file is not allowed",
-        )
+        raise BadRequestException("Empty file is not allowed")
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 

@@ -67,8 +67,8 @@ async def commit_onboarding_session(
     return await service.commit_onboarding_session(payload.session_id)
 
 
-@router.delete(
-    "/{session_id}",
+@router.post(
+    "/{session_id}/cancel",
     response_model=schemas.EmployeeOnboardingCancelResponse,
 )
 async def cancel_onboarding_session(

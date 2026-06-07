@@ -129,10 +129,25 @@ class AttendancePipeline:
             logger.info("Attendance loop exited")
 
     async def _process_frame(self, frame_data: FrameData) -> None:
-        acquired, embedding = await asyncio.to_thread(
-            self.pipeline_processor.try_get_embedding,
-            frame_data.image,
-        )
+        try:
+            acquired, pipeline_result = await asyncio.to_thread(
+                self.pipeline_processor.try_run_pipeline,
+                frame_data.image,
+            )
+        except Exception as exc:
+            logger.exception(
+                "Attendance frame processing failed: frame=%s error=%s",
+                frame_data.index,
+                exc,
+            )
+            self._reset_confirmation()
+            self._set_latest_result(
+                status="error",
+                message="Không xử lý được frame camera",
+                frame_index=frame_data.index,
+            )
+            return
+
         if not acquired:
             logger.info(
                 "Attendance frame not recognized: frame=%s reason=ml_pipeline_busy",
@@ -140,20 +155,35 @@ class AttendancePipeline:
             )
             self._set_latest_result(
                 status="busy",
-                message="ML pipeline busy",
+                message="Đang xử lý camera",
                 frame_index=frame_data.index,
             )
             return
 
+        if pipeline_result is None:
+            self._set_latest_result(
+                status="scanning",
+                message="Đang quét khuôn mặt",
+                frame_index=frame_data.index,
+            )
+            return
+
+        face_box = pipeline_result.get("bbox")
+        embedding = pipeline_result.get("embedding") if pipeline_result.get("valid") else None
+
         if embedding is None:
+            status, message = self._pipeline_failure_display(pipeline_result)
             logger.info(
-                "Attendance frame not recognized: frame=%s reason=no_valid_face",
+                "Attendance frame not recognized: frame=%s stage=%s reason=%s",
                 frame_data.index,
+                pipeline_result.get("stage"),
+                pipeline_result.get("reason"),
             )
             self._reset_confirmation()
             self._set_latest_result(
-                status="scanning",
-                message="Scanning for face",
+                status=status,
+                message=message,
+                face_box=face_box,
                 frame_index=frame_data.index,
             )
             return
@@ -168,9 +198,10 @@ class AttendancePipeline:
             )
             self._reset_confirmation()
             self._set_latest_result(
-                status=result.status,
-                message="Face not recognized",
+                status="not_recognized",
+                message="Chưa nhận diện được nhân viên",
                 confidence=result.confidence,
+                face_box=face_box,
                 frame_index=frame_data.index,
             )
             return
@@ -187,10 +218,11 @@ class AttendancePipeline:
             self._reset_confirmation()
             self._set_latest_result(
                 status="rejected",
-                message="Employee is inactive",
+                message=f"{person.employee_code} chưa được phép chấm công",
                 staff_id=person.staff_id,
                 employee_code=person.employee_code,
                 confidence=result.confidence,
+                face_box=face_box,
                 frame_index=frame_data.index,
             )
             return
@@ -198,10 +230,11 @@ class AttendancePipeline:
         if not self._confirm_same_person(person.staff_id):
             self._set_latest_result(
                 status="confirming",
-                message=f"Confirming {person.employee_code}",
+                message=f"Đã nhận diện {person.employee_code}, đang ghi nhận...",
                 staff_id=person.staff_id,
                 employee_code=person.employee_code,
                 confidence=result.confidence,
+                face_box=face_box,
                 consecutive_count=self._consecutive_count,
                 frame_index=frame_data.index,
             )
@@ -214,6 +247,7 @@ class AttendancePipeline:
                 staff_id=person.staff_id,
                 employee_code=person.employee_code,
                 confidence=result.confidence,
+                face_box=face_box,
                 consecutive_count=self._consecutive_count,
                 frame_index=frame_data.index,
             )
@@ -225,6 +259,7 @@ class AttendancePipeline:
             staff_id=person.staff_id,
             employee_code=person.employee_code,
             confidence=result.confidence,
+            face_box=face_box,
             consecutive_count=self._consecutive_count,
             frame_index=frame_data.index,
         )
@@ -244,6 +279,7 @@ class AttendancePipeline:
                 staff_id=person.staff_id,
                 employee_code=person.employee_code,
                 confidence=result.confidence,
+                face_box=face_box,
                 consecutive_count=self._consecutive_count,
                 frame_index=frame_data.index,
             )
@@ -257,6 +293,7 @@ class AttendancePipeline:
                 staff_id=person.staff_id,
                 employee_code=person.employee_code,
                 confidence=result.confidence,
+                face_box=face_box,
                 consecutive_count=self._consecutive_count,
                 frame_index=frame_data.index,
                 event_id=str(attendance_response.event_id) if attendance_response.event_id else None,
@@ -270,6 +307,7 @@ class AttendancePipeline:
                 staff_id=person.staff_id,
                 employee_code=person.employee_code,
                 confidence=result.confidence,
+                face_box=face_box,
                 consecutive_count=self._consecutive_count,
                 frame_index=frame_data.index,
                 cooldown_ttl_seconds=attendance_response.cooldown_ttl_seconds,
@@ -281,6 +319,7 @@ class AttendancePipeline:
                 staff_id=person.staff_id,
                 employee_code=person.employee_code,
                 confidence=result.confidence,
+                face_box=face_box,
                 consecutive_count=self._consecutive_count,
                 frame_index=frame_data.index,
             )
@@ -291,6 +330,7 @@ class AttendancePipeline:
                 staff_id=person.staff_id,
                 employee_code=person.employee_code,
                 confidence=result.confidence,
+                face_box=face_box,
                 consecutive_count=self._consecutive_count,
                 frame_index=frame_data.index,
                 reason=attendance_response.reason,
@@ -350,6 +390,21 @@ class AttendancePipeline:
         if event_type == "check_out":
             return "check-out"
         return "check-in"
+
+    @staticmethod
+    def _pipeline_failure_display(result: dict) -> tuple[str, str]:
+        stage = result.get("stage")
+        reason = str(result.get("reason") or "")
+
+        if stage == "antispoof":
+            return "spoof_detected", "Phát hiện giả mạo"
+        if stage == "detect" and "Không phát hiện" in reason:
+            return "no_face", "Không phát hiện khuôn mặt"
+        if stage == "detect" and "Phát hiện" in reason:
+            return "multiple_faces", "Phát hiện nhiều hơn 1 khuôn mặt"
+        if stage == "quality":
+            return "face_rejected", reason or "Khuôn mặt không hợp lệ"
+        return "face_rejected", reason or "Khuôn mặt không hợp lệ"
 
     def _confirm_same_person(self, staff_id: str) -> bool:
         if staff_id == self._last_staff_id:
@@ -422,7 +477,7 @@ class AttendancePipeline:
         if age > settings.attendance_recognition_result_max_age_seconds:
             return {
                 "status": "scanning",
-                "message": "Scanning for face",
+                "message": "Đang quét khuôn mặt",
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         return result
@@ -456,15 +511,14 @@ class AttendancePipeline:
         status = result.get("status", "unknown")
         message = result.get("message", "")
         employee_code = result.get("employee_code")
-        confidence = result.get("confidence")
 
-        lines = [f"Trạng thái: {status}"]
+        lines = []
         if employee_code:
-            lines.append(f"Nhân viên: {employee_code}")
-        if confidence is not None:
-            lines.append(f"Độ tin cậy: {float(confidence):.3f}")
-        if message:
-            lines.append(str(message))
+            lines.append(str(employee_code))
+        lines.append(str(message or AttendancePipeline._status_message(status)))
+
+        face_box = AttendancePipeline._normalize_face_box(result.get("face_box"), frame.shape)
+        color = AttendancePipeline._status_color(status)
 
         try:
             font = ImageFont.truetype(str(OVERLAY_FONT_PATH), 22)
@@ -472,47 +526,150 @@ class AttendancePipeline:
             image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             draw = ImageDraw.Draw(image)
 
-            x, y = 24, 22
-            line_height = 34
-            text_width = max(draw.textlength(line, font=font) for line in lines)
-            width = int(min(max(text_width + 32, 430), frame.shape[1] - 24))
-            height = 24 + line_height * len(lines)
-            draw.rounded_rectangle(
-                (12, 12, 12 + width, 12 + height),
-                radius=10,
-                fill=(0, 0, 0),
-                outline=(0, 180, 255),
-                width=2,
-            )
+            if face_box is not None:
+                AttendancePipeline._draw_face_box(draw, face_box, color)
 
-            for idx, line in enumerate(lines):
-                draw.text(
-                    (x, y + idx * line_height),
-                    line,
-                    fill=(255, 255, 255),
-                    font=font_bold if idx == 0 else font,
-                )
+            AttendancePipeline._draw_status_panel(
+                draw=draw,
+                frame_width=frame.shape[1],
+                lines=lines,
+                color=color,
+                font=font,
+                font_bold=font_bold,
+                status=status,
+            )
 
             frame[:] = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
         except Exception:
             logger.exception("Failed to draw unicode overlay; falling back to OpenCV text")
-            x, y = 24, 32
-            line_height = 30
-            width = 430
-            height = 24 + line_height * len(lines)
-            cv2.rectangle(frame, (12, 12), (12 + width, 12 + height), (0, 0, 0), -1)
-            cv2.rectangle(frame, (12, 12), (12 + width, 12 + height), (0, 180, 255), 2)
-            for idx, line in enumerate(lines):
-                cv2.putText(
-                    frame,
-                    line,
-                    (x, y + idx * line_height),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.75,
-                    (255, 255, 255),
-                    2,
-                    cv2.LINE_AA,
-                )
+            AttendancePipeline._draw_overlay_cv2(frame, lines, face_box, color)
+
+    @staticmethod
+    def _status_message(status: str) -> str:
+        if status == "recorded":
+            return "Đã chấm công"
+        if status in {"record_failed", "spoof_detected"}:
+            return "Chưa ghi nhận được"
+        if status in {"completed", "cooldown"}:
+            return "Đã chấm công gần đây"
+        if status in {"multiple_faces", "not_recognized", "face_rejected", "rejected"}:
+            return "Chưa thể chấm công"
+        if status in {"recording", "confirming"}:
+            return "Đang ghi nhận..."
+        return "Đang quét khuôn mặt"
+
+    @staticmethod
+    def _status_color(status: str) -> tuple[int, int, int]:
+        if status == "recorded":
+            return (34, 197, 94)
+        if status in {"record_failed", "spoof_detected"}:
+            return (239, 68, 68)
+        if status in {
+            "completed",
+            "cooldown",
+            "multiple_faces",
+            "not_recognized",
+            "face_rejected",
+            "rejected",
+        }:
+            return (245, 158, 11)
+        return (255, 255, 255)
+
+    @staticmethod
+    def _status_text_color(status: str) -> tuple[int, int, int]:
+        if status in {"recorded", "record_failed", "spoof_detected"}:
+            return (255, 255, 255)
+        return (17, 24, 39)
+
+    @staticmethod
+    def _normalize_face_box(box, frame_shape) -> tuple[int, int, int, int] | None:
+        if not box or len(box) != 4:
+            return None
+
+        height, width = frame_shape[:2]
+        x1, y1, x2, y2 = (int(v) for v in box)
+        x1 = max(0, min(x1, width - 1))
+        y1 = max(0, min(y1, height - 1))
+        x2 = max(0, min(x2, width - 1))
+        y2 = max(0, min(y2, height - 1))
+        if x2 <= x1 or y2 <= y1:
+            return None
+        return x1, y1, x2, y2
+
+    @staticmethod
+    def _draw_face_box(
+        draw: ImageDraw.ImageDraw,
+        box: tuple[int, int, int, int],
+        color: tuple[int, int, int],
+    ) -> None:
+        x1, y1, x2, y2 = box
+        for offset in range(4):
+            draw.rounded_rectangle(
+                (x1 - offset, y1 - offset, x2 + offset, y2 + offset),
+                radius=12,
+                outline=color,
+                width=1,
+            )
+
+    @staticmethod
+    def _draw_status_panel(
+        *,
+        draw: ImageDraw.ImageDraw,
+        frame_width: int,
+        lines: list[str],
+        color: tuple[int, int, int],
+        font: ImageFont.FreeTypeFont,
+        font_bold: ImageFont.FreeTypeFont,
+        status: str,
+    ) -> None:
+        line_height = 32
+        padding_x = 16
+        padding_y = 12
+        text_width = max(draw.textlength(line, font=font_bold if idx == 0 else font) for idx, line in enumerate(lines))
+        width = min(max(int(text_width) + padding_x * 2, 300), frame_width - 24)
+        height = padding_y * 2 + line_height * len(lines)
+        draw.rounded_rectangle(
+            (12, 12, 12 + width, 12 + height),
+            radius=10,
+            fill=color,
+        )
+        text_color = AttendancePipeline._status_text_color(status)
+        for idx, line in enumerate(lines):
+            draw.text(
+                (12 + padding_x, 12 + padding_y + idx * line_height),
+                line,
+                fill=text_color,
+                font=font_bold if idx == 0 else font,
+            )
+
+    @staticmethod
+    def _draw_overlay_cv2(
+        frame,
+        lines: list[str],
+        face_box: tuple[int, int, int, int] | None,
+        color_rgb: tuple[int, int, int],
+    ) -> None:
+        color_bgr = (color_rgb[2], color_rgb[1], color_rgb[0])
+        if face_box is not None:
+            x1, y1, x2, y2 = face_box
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color_bgr, 4)
+        panel_x, panel_y = 12, 12
+
+        line_height = 28
+        width = 360
+        height = 20 + line_height * len(lines)
+        cv2.rectangle(frame, (panel_x, panel_y), (panel_x + width, panel_y + height), color_bgr, -1)
+        for idx, line in enumerate(lines):
+            cv2.putText(
+                frame,
+                line,
+                (panel_x + 12, panel_y + 28 + idx * line_height),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 0, 0),
+                2,
+                cv2.LINE_AA,
+            )
 
     @staticmethod
     def _frame_delay_seconds() -> float:

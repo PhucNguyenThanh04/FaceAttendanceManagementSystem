@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.api.v1.features.users import models
+from src.api.v1.features.staff.models import Employee
 from src.api.v1.shared.enums import RoleName, UserStatus
 from src.core.db.database import get_db
 from src.utils.exeptions import (
@@ -199,7 +200,24 @@ class UserRepo:
         user = await self.get_user_by_id(user_id)
         if user is None:
             return False
+        linked_employee_id = await self.db.scalar(
+            select(Employee.employee_id).where(Employee.user_id == user_id)
+        )
         try:
+            if linked_employee_id is not None:
+                user.status = UserStatus.inactive
+                user.token_version += 1
+                user.refresh_token_hash = None
+                user.refresh_token_expires_at = None
+                user.refresh_token_created_at = None
+                await self.db.commit()
+                logger.info(
+                    "User is linked to employee; deactivated instead of hard delete: user_id=%s employee_id=%s",
+                    user_id,
+                    linked_employee_id,
+                )
+                return True
+
             await self.db.delete(user)
             await self.db.commit()
             return True

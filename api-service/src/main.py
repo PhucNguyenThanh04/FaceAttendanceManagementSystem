@@ -12,8 +12,8 @@ from src.core.cache.redis_client import create_redis_async_client
 from src.core.bootstrap.admin_seed import ensure_bootstrap_admin
 from src.core.configs.settings import settings
 from src.core.db.database import engine
+from src.core.exception_handlers import register_exception_handlers
 from src.utils.setup_logger import setup_logger
-from src.utils.exeptions import app_exception_handler, AppException
 
 
 from src.api.v1.routers import api_router
@@ -94,7 +94,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_exception_handler(AppException, app_exception_handler)
+register_exception_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,

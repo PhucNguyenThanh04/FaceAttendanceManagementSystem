@@ -4,6 +4,7 @@ import asyncio
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
+from app.core.configs.settings import settings
 
 from app.core.pipeline.attendance_pipline import AttendancePipeline
 
@@ -47,7 +48,7 @@ async def stop_attendance(request: Request) -> dict:
 @router.get("/stream")
 async def attendance_stream(
     request: Request,
-    fps: float = Query(default=10.0, ge=1.0, le=30.0),
+    fps: float = Query(default=settings.attendance_stream_fps, ge=1.0, le=30.0),
 ) -> StreamingResponse:
     worker = get_attendance_worker(request)
     frame_delay = 1.0 / max(float(fps), 1.0)

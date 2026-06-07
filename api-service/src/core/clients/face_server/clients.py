@@ -10,6 +10,7 @@ from src.core.clients.face_server.schemas import (
     AICancelEnrollmentResponse,
     AICommitRequest,
     AICommitResponse,
+    AIDeactivatePersonResponse,
     AIDeletePersonResponse,
     AIEnrolledStatusResponse,
     AIHealthResponse,
@@ -83,6 +84,14 @@ class FaceServerClient:
         )
         logger.debug(f"delete_person response: {data}")
         return AIDeletePersonResponse.model_validate(data)
+
+    async def deactivate_person(self, staff_id: str) -> AIDeactivatePersonResponse:
+        data = await self._request_json(
+            method="PATCH",
+            path=AIServerPaths.deactivate_person(staff_id),
+        )
+        logger.debug(f"deactivate_person response: {data}")
+        return AIDeactivatePersonResponse.model_validate(data)
 
     async def check_enrolled_status(self, staff_id: str) -> AIEnrolledStatusResponse:
         data = await self._request_json(

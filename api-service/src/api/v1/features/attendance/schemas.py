@@ -107,6 +107,7 @@ class AttendanceEventAcceptedResponse(BaseModel):
     employee_id: uuid.UUID
     event_id: uuid.UUID | None = None
     record_id: uuid.UUID | None = None
+    shift_id: int | None = None
     event_type: AttendanceEventType | None = None
     event_time: datetime
     work_date: date | None = None

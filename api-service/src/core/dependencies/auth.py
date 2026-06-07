@@ -3,7 +3,7 @@ FastAPI dependencies dùng chung: xác thực JWT, phân quyền role.
 """
 
 from typing import Annotated
-from fastapi import Depends, HTTPException, Request, Security, status
+from fastapi import Depends, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy import select
@@ -15,6 +15,7 @@ from src.core.security.authentication import build_access_token_blacklist_key
 from src.api.v1.features.users.models import User
 from src.api.v1.features.staff.models import Employee
 from src.api.v1.shared.enums import RoleName, UserStatus
+from src.core.exceptions import ForbiddenException, NotFoundException, UnauthorizedException
 
 bearer_scheme = HTTPBearer()
 
@@ -25,11 +26,7 @@ async def get_current_user(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
     """Decode JWT → load User từ DB. Dùng cho mọi endpoint cần auth."""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Token không hợp lệ hoặc đã hết hạn",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    credentials_exception = UnauthorizedException("Token không hợp lệ hoặc đã hết hạn")
     try:
         payload = jwt.decode(
             credentials.credentials,
@@ -62,10 +59,7 @@ async def get_current_user(
     if int(token_version_claim) != int(user.token_version):
         raise credentials_exception
     if user.status != UserStatus.active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tài khoản đã bị khóa hoặc vô hiệu hóa",
-        )
+        raise ForbiddenException("Tài khoản đã bị khóa hoặc vô hiệu hóa")
     return user
 
 
@@ -79,10 +73,7 @@ async def get_current_employee(
     )
     employee = result.scalar_one_or_none()
     if employee is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Không tìm thấy hồ sơ nhân viên",
-        )
+        raise NotFoundException("Employee profile")
     return employee
 
 
@@ -100,10 +91,7 @@ def require_roles(*roles: RoleName):
     ) -> User:
         user_role = current_user.role.name
         if user_role not in roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Yêu cầu quyền: {', '.join(r.value for r in roles)}",
-            )
+            raise ForbiddenException(f"Yêu cầu quyền: {', '.join(r.value for r in roles)}")
         return current_user
     return _check
 

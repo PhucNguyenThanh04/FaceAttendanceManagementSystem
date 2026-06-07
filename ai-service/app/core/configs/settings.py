@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     attendance_recognition_result_max_age_seconds: float
     attendance_process_fps: float
     attendance_buffer_flush_grabs: int
+    attendance_stream_fps: float
 
     required_images: int
     session_timeout: int

@@ -216,7 +216,7 @@ class EmployeeOnboardingService:
                 )
         if created_employee_id is not None:
             try:
-                await self.employee_service.delete_employee(created_employee_id)
+                await self.employee_service.hard_delete_employee_for_rollback(created_employee_id)
             except Exception:
                 logger.exception(
                     "Rollback warning: failed to delete employee %s",

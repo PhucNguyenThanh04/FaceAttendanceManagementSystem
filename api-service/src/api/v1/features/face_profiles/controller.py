@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends
 
 from src.api.v1.features.face_profiles import schemas
 from src.api.v1.features.face_profiles.service import FaceProfileService, get_face_profile_service
@@ -59,12 +59,3 @@ async def revoke_face_profile(
 ) -> schemas.FaceProfileRead:
     return await service.revoke_face_profile(profile_id, payload)
 
-
-@router.delete("/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_face_profile(
-    profile_id: uuid.UUID,
-    service: FaceProfileService = Depends(get_face_profile_service),
-    _: User = Depends(require_roles(RoleName.admin)),
-) -> Response:
-    await service.delete_face_profile(profile_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)

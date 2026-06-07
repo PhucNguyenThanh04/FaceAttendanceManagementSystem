@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends
 
 from src.api.v1.features.users import schemas as user_schemas
 from src.api.v1.features.users.models import User
@@ -91,12 +91,3 @@ async def deactivate_user(
 ) -> user_schemas.UserRead:
     return await user_service.deactivate_user(user_id)
 
-
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(
-    user_id: UUID,
-    _: User = Depends(require_roles(RoleName.admin)),
-    user_service: UserService = Depends(get_user_service),
-) -> Response:
-    await user_service.delete_user(user_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)

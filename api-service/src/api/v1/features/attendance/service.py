@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends
 from redis.asyncio import Redis
@@ -13,18 +14,21 @@ from src.api.v1.shared.enums import (
     AttendanceEventType,
     AttendanceRecordStatus,
     AttendanceSource,
+    EmployeeStatus,
 )
+from src.core.configs.settings import settings
 from src.core.dependencies.dep import get_redis_client
 from src.utils.exeptions import DatabaseException, NotFoundException
 from src.utils.setup_logger import setup_logger
 
 logger = setup_logger(__name__)
+APP_TZ = ZoneInfo(settings.database_timezone)
 
 COOLDOWN_SECONDS = 600
-CHECK_IN_START = time(hour=8, minute=0)
-CHECK_OUT_END = time(hour=17, minute=0)
 REASON_DUPLICATE_ATTENDANCE = "DUPLICATE_ATTENDANCE"
 REASON_ATTENDANCE_ALREADY_COMPLETED = "ATTENDANCE_ALREADY_COMPLETED"
+REASON_EMPLOYEE_INACTIVE = "EMPLOYEE_INACTIVE"
+REASON_NO_ACTIVE_SHIFT_ASSIGNMENT = "NO_ACTIVE_SHIFT_ASSIGNMENT"
 
 
 class AttendanceService:
@@ -45,26 +49,46 @@ class AttendanceService:
         return event_time
 
     @staticmethod
-    def _minutes_after(start: time, value: datetime) -> int:
-        threshold = value.replace(
-            hour=start.hour,
-            minute=start.minute,
-            second=start.second,
-            microsecond=start.microsecond,
-        )
-        seconds = (value - threshold).total_seconds()
-        return max(0, int(seconds // 60))
+    def _to_app_timezone(event_time: datetime) -> datetime:
+        return event_time.astimezone(APP_TZ)
 
     @staticmethod
-    def _minutes_before(end: time, value: datetime) -> int:
-        threshold = value.replace(
-            hour=end.hour,
-            minute=end.minute,
-            second=end.second,
-            microsecond=end.microsecond,
-        )
-        seconds = (threshold - value).total_seconds()
-        return max(0, int(seconds // 60))
+    def _combine_shift_datetime(
+        work_date: date,
+        shift_time: time,
+        event_time: datetime,
+    ) -> datetime:
+        value = datetime.combine(work_date, shift_time)
+        if event_time.tzinfo is not None and value.tzinfo is None:
+            value = value.replace(tzinfo=event_time.tzinfo)
+        return value
+
+    @classmethod
+    def _shift_start_datetime(cls, shift, work_date: date, event_time: datetime) -> datetime:
+        return cls._combine_shift_datetime(work_date, shift.start_time, event_time)
+
+    @classmethod
+    def _shift_end_datetime(cls, shift, work_date: date, event_time: datetime) -> datetime:
+        value = cls._combine_shift_datetime(work_date, shift.end_time, event_time)
+        if shift.is_overnight:
+            value += timedelta(days=1)
+        return value
+
+    @classmethod
+    def _late_minutes(cls, shift, work_date: date, event_time: datetime) -> int:
+        scheduled_start = cls._shift_start_datetime(shift, work_date, event_time)
+        grace_until = scheduled_start + timedelta(minutes=shift.late_threshold_minutes or 0)
+        if event_time <= grace_until:
+            return 0
+        return max(0, int((event_time - scheduled_start).total_seconds() // 60))
+
+    @classmethod
+    def _early_leave_minutes(cls, shift, work_date: date, event_time: datetime) -> int:
+        scheduled_end = cls._shift_end_datetime(shift, work_date, event_time)
+        allowed_from = scheduled_end - timedelta(minutes=shift.early_leave_threshold_minutes or 0)
+        if event_time >= allowed_from:
+            return 0
+        return max(0, int((scheduled_end - event_time).total_seconds() // 60))
 
     @staticmethod
     def _worked_minutes(check_in_time: datetime, check_out_time: datetime) -> int:
@@ -102,13 +126,26 @@ class AttendanceService:
         payload: schemas.AttendanceAIEventCreate,
     ) -> schemas.AttendanceEventAcceptedResponse:
         event_time = self._normalize_event_time(payload.event_time)
+        attendance_time = self._to_app_timezone(event_time)
         employee_id = payload.employee_id
         if self.redis is None:
             raise RuntimeError("Redis client is required to create attendance events")
 
-        if not await self.attendance_repo.employee_exists(employee_id):
+        employee_status = await self.attendance_repo.get_employee_status(employee_id)
+        if employee_status is None:
             logger.warning("Attendance event employee not found: employee_id=%s", employee_id)
             raise NotFoundException("Employee")
+        if employee_status != EmployeeStatus.active:
+            logger.info(
+                "Attendance rejected because employee is not active: employee_id=%s status=%s",
+                employee_id,
+                employee_status,
+            )
+            return self._rejected_response(
+                employee_id=employee_id,
+                event_time=event_time,
+                reason=REASON_EMPLOYEE_INACTIVE,
+            )
 
         cooldown_key = self._cooldown_key(employee_id)
         cooldown_value = await self.redis.get(cooldown_key)
@@ -126,11 +163,39 @@ class AttendanceService:
                 cooldown_ttl_seconds=ttl if ttl and ttl > 0 else None,
             )
 
-        work_date = event_time.date()
-        record = await self.attendance_repo.get_record_by_employee_and_work_date(
+        event_date = attendance_time.date()
+        record = await self.attendance_repo.get_open_overnight_record_for_checkout(
             employee_id=employee_id,
-            work_date=work_date,
+            event_date=event_date,
         )
+        if record is not None:
+            work_date = record.work_date.date()
+            shift = record.shift
+        else:
+            work_date = event_date
+            record = await self.attendance_repo.get_record_by_employee_and_work_date(
+                employee_id=employee_id,
+                work_date=work_date,
+            )
+            shift = record.shift if record is not None else None
+
+        if shift is None:
+            assignment = await self.attendance_repo.get_current_shift_assignment(
+                employee_id=employee_id,
+                as_of=work_date,
+            )
+            if assignment is None or assignment.shift is None:
+                logger.info(
+                    "Attendance rejected because employee has no active shift assignment: employee_id=%s work_date=%s",
+                    employee_id,
+                    work_date,
+                )
+                return self._rejected_response(
+                    employee_id=employee_id,
+                    event_time=event_time,
+                    reason=REASON_NO_ACTIVE_SHIFT_ASSIGNMENT,
+                )
+            shift = assignment.shift
 
         if record is None or record.check_in_time is None:
             event_type = AttendanceEventType.check_in
@@ -166,7 +231,7 @@ class AttendanceService:
             if record is None:
                 record = AttendanceRecord(
                     employee_id=employee_id,
-                    shift_id=None,
+                    shift_id=shift.shift_id,
                     work_date=self.attendance_repo.work_date_to_db_value(work_date),
                     status=AttendanceRecordStatus.present,
                     late_minutes=0,
@@ -175,8 +240,10 @@ class AttendanceService:
                     source=AttendanceSource.face_recognition,
                 )
                 self.attendance_repo.add_record(record)
+            elif record.shift_id is None:
+                record.shift_id = shift.shift_id
 
-            late_minutes = self._minutes_after(CHECK_IN_START, event_time)
+            late_minutes = self._late_minutes(shift, work_date, attendance_time)
             record.check_in_time = event_time
             record.source = AttendanceSource.face_recognition
             record.late_minutes = late_minutes
@@ -190,7 +257,10 @@ class AttendanceService:
         else:
             if record is None or record.check_in_time is None:
                 raise DatabaseException("Attendance record is missing check-in state")
-            early_leave_minutes = self._minutes_before(CHECK_OUT_END, event_time)
+            if record.shift_id is None:
+                record.shift_id = shift.shift_id
+
+            early_leave_minutes = self._early_leave_minutes(shift, work_date, attendance_time)
             record.check_out_time = event_time
             record.source = AttendanceSource.face_recognition
             record.early_leave_minutes = early_leave_minutes
@@ -233,6 +303,7 @@ class AttendanceService:
             employee_id=employee_id,
             event_id=event.event_id,
             record_id=record.record_id,
+            shift_id=record.shift_id,
             event_type=event_type,
             event_time=event_time,
             work_date=work_date,

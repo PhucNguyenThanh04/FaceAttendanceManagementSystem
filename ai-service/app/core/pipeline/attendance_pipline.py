@@ -275,7 +275,7 @@ class AttendancePipeline:
         if attendance_response is None:
             self._set_latest_result(
                 status="record_failed",
-                message=f"Đã nhận diện {person.employee_code} nhưng chưa ghi nhận được",
+                message=f"{person.employee_code}: lỗi kết nối API chấm công",
                 staff_id=person.staff_id,
                 employee_code=person.employee_code,
                 confidence=result.confidence,
@@ -324,9 +324,13 @@ class AttendancePipeline:
                 frame_index=frame_data.index,
             )
         else:
+            failure_message = self._attendance_rejection_message(
+                person.employee_code,
+                attendance_response.reason,
+            )
             self._set_latest_result(
                 status="record_failed",
-                message=f"Đã nhận diện {person.employee_code} nhưng chưa ghi nhận được",
+                message=failure_message,
                 staff_id=person.staff_id,
                 employee_code=person.employee_code,
                 confidence=result.confidence,
@@ -390,6 +394,16 @@ class AttendancePipeline:
         if event_type == "check_out":
             return "check-out"
         return "check-in"
+
+    @staticmethod
+    def _attendance_rejection_message(employee_code: str, reason: str | None) -> str:
+        if reason == "EMPLOYEE_INACTIVE":
+            return f"{employee_code}: nhân viên đang inactive"
+        if reason == "NO_ACTIVE_SHIFT_ASSIGNMENT":
+            return f"{employee_code}: chưa được gán ca làm việc"
+        if reason:
+            return f"{employee_code}: chưa ghi nhận ({reason})"
+        return f"{employee_code}: chưa ghi nhận được"
 
     @staticmethod
     def _pipeline_failure_display(result: dict) -> tuple[str, str]:

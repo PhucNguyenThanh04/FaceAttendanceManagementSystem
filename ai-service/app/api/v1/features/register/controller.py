@@ -88,6 +88,20 @@ async def deactivate_person(
     }
 
 
+@router.patch("/{staff_id}/activate")
+async def activate_person(
+    staff_id: str,
+    service: RegisterService = Depends(get_register_service),
+):
+    updated = await service.activate_person(staff_id)
+    return {
+        "activated": True,
+        "staff_id": staff_id,
+        "vectors_updated": updated,
+        "is_active": True,
+    }
+
+
 @router.get("/{staff_id}/status")
 async def check_enrolled(
     staff_id: str,

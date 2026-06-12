@@ -127,6 +127,14 @@ class RegisterService:
         logger.info("Đã inactive %d vector | staff_id=%s", updated, staff_id)
         return updated
 
+    async def activate_person(self, staff_id: str) -> int:
+        updated = await self.vectordb.update_payload_by_staff_id(
+            staff_id,
+            schemas_vector.PayloadUpdateRequest(is_active=True),
+        )
+        logger.info("Đã active %d vector | staff_id=%s", updated, staff_id)
+        return updated
+
     # ── Kiểm tra enroll ───────────────────────────────────────────────────────
 
     async def count_vectors(self, staff_id: str) -> int:

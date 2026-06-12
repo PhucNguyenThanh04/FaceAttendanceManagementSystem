@@ -1,0 +1,96 @@
+from pathlib import Path
+from functools import lru_cache
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BASE_DIR = Path(__file__).resolve().parents[2]
+
+
+class Settings(BaseSettings):
+    # LLM
+    google_api_key: str
+    gemini_model: str = "gemini-1.5-flash"
+
+    # Qdrant
+    qdrant_host: str = "localhost"
+    qdrant_port: int = 6333
+    qdrant_collection_policy: str = "company_policy"
+    qdrant_collection_law: str = "traffic_law"
+    qdrant_timeout: float = 5.0
+    
+    dense_vector_name: str = "dense"
+    sparse_vector_name: str = "sparse"
+    bge_m3_dense_size: int = 1024
+
+    # Embedding / reranking
+    embedding_model: str = "BAAI/bge-m3"
+    embedding_device: str = "gpu"  
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+    # Retrieval
+    retrieval_top_k: int = 20
+    rerank_top_n: int = 5
+    retrieval_score_threshold: float = 0.45
+
+    # API server
+    api_host: str = "0.0.0.0"
+    api_port: int = 8002
+    api_debug: bool = True
+
+    # Optional web search
+    tavily_api_key: str | None = None
+    web_search_max_results: int = 5
+
+    # Backward-compatible optional fields for future internal-service wiring.
+    api_server_base_url: str = ""
+    api_key: str = ""
+    agent_server_name: str = "rag-chatbox"
+
+    @property
+    def host_qdrant(self) -> str:
+        return self.qdrant_host
+
+    @property
+    def port_qdrant(self) -> int:
+        return self.qdrant_port
+
+    @property
+    def qdrant_url(self) -> str:
+        return f"http://{self.qdrant_host}:{self.qdrant_port}"
+
+    @property
+    def url_qdrant(self) -> str:
+        return self.qdrant_url
+
+    @property
+    def default_qdrant_collection(self) -> str:
+        return self.qdrant_collection_policy
+
+    @property
+    def qdrant_collection_name(self) -> str:
+        return self.default_qdrant_collection
+
+    model_config = SettingsConfigDict(
+        env_file=BASE_DIR / ".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+    
+# shortcut toàn app
+settings = get_settings()
+
+
+
+if __name__ == "__main__":
+    # Test load settings
+    print("Gemini Model:", settings.gemini_model)
+    print("Qdrant URL:", settings.qdrant_url)
+    print("Policy Collection:", settings.qdrant_collection_policy)
+    print("Embedding Model:", settings.embedding_model)
+    print("API:", f"{settings.api_host}:{settings.api_port}")

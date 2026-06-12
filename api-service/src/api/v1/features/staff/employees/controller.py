@@ -60,10 +60,10 @@ async def delete_employee(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/deactivate/{employee_id}", response_model=schemas.EmployeeRead)
-async def deactivate_employee(
+@router.post("/activate/{employee_id}", response_model=schemas.EmployeeRead)
+async def activate_employee(
     employee_id: uuid.UUID,
     service: EmployeeService = Depends(get_employee_service),
     _: User = Depends(require_roles(RoleName.admin, RoleName.hr)),
 ) -> schemas.EmployeeRead:
-    return await service.deactivate_employee(employee_id)
+    return await service.activate_employee(employee_id)

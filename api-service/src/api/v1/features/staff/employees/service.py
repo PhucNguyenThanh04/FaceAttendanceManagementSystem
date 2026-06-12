@@ -148,6 +148,49 @@ class EmployeeService:
 
         await self._deactivate_ai_vectors_for_employee(employee_id=employee_id, reason=reason)
 
+    async def _activate_ai_vectors_for_employee(
+        self,
+        *,
+        employee_id: uuid.UUID,
+        reason: str,
+    ) -> None:
+        try:
+            result = await self.face_server_client.activate_person(str(employee_id))
+            logger.info(
+                "AI vectors activated for employee: employee_id=%s vectors_updated=%s reason=%s",
+                employee_id,
+                result.vectors_updated,
+                reason,
+            )
+        except httpx.HTTPError as exc:
+            logger.exception(
+                "Failed to activate AI vectors for employee: employee_id=%s reason=%s",
+                employee_id,
+                reason,
+            )
+            raise MLProcessingException(
+                step="activate_employee_vectors",
+                reason=str(exc),
+                task_id=str(employee_id),
+            ) from exc
+
+    async def _activate_ai_vectors_if_profile_exists(
+        self,
+        *,
+        employee_id: uuid.UUID,
+        reason: str,
+    ) -> None:
+        profile = await self.employee_repo.get_face_profile_by_employee_id(employee_id)
+        if profile is None:
+            logger.info(
+                "Skip AI vector activation because employee has no face profile: employee_id=%s reason=%s",
+                employee_id,
+                reason,
+            )
+            return
+
+        await self._activate_ai_vectors_for_employee(employee_id=employee_id, reason=reason)
+
     async def create_employee(
         self,
         payload: schemas.EmployeeCreate,
@@ -340,6 +383,32 @@ class EmployeeService:
         deactivated = await self.employee_repo.deactivate_employee(employee_id)
         logger.info("Employee deactivated with linked cleanup: employee_id=%s", employee_id)
         return self._to_read(deactivated)
+
+    async def activate_employee(self, employee_id: uuid.UUID) -> schemas.EmployeeRead:
+        employee = await self.employee_repo.get_employee_by_id(employee_id)
+        if employee is None:
+            logger.warning("Activate employee not found: employee_id=%s", employee_id)
+            raise NotFoundException("Employee")
+
+        already_active = (
+            employee.status == EmployeeStatus.active
+            and (employee.user is None or employee.user.status == UserStatus.active)
+            and (
+                employee.face_profile is None
+                or employee.face_profile.status == FaceProfileStatus.active
+            )
+        )
+        if already_active:
+            logger.info("Employee already active: employee_id=%s", employee_id)
+            return self._to_read(employee)
+
+        await self._activate_ai_vectors_if_profile_exists(
+            employee_id=employee_id,
+            reason="employee_activate",
+        )
+        activated = await self.employee_repo.activate_employee_with_links(employee_id)
+        logger.info("Employee activated with linked restore: employee_id=%s", employee_id)
+        return self._to_read(activated)
 
 
 def get_employee_service(

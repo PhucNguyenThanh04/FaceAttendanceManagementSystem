@@ -340,6 +340,26 @@ class EmployeeRepo:
 
         return changed
 
+    def _apply_activation_side_effects(self, employee: Employee) -> bool:
+        changed = False
+
+        if employee.status != EmployeeStatus.active:
+            employee.status = EmployeeStatus.active
+            changed = True
+
+        if employee.user is not None and employee.user.status != UserStatus.active:
+            employee.user.status = UserStatus.active
+            employee.user.token_version += 1
+            changed = True
+
+        if employee.face_profile is not None and employee.face_profile.status != FaceProfileStatus.active:
+            employee.face_profile.status = FaceProfileStatus.active
+            employee.face_profile.revocation_reason = None
+            employee.face_profile.revoked_at = None
+            changed = True
+
+        return changed
+
     async def soft_delete_employee_with_links(
         self,
         employee_id: uuid.UUID,
@@ -386,6 +406,26 @@ class EmployeeRepo:
             employee_id,
             reason="Employee deactivated",
         )
+
+    async def activate_employee_with_links(self, employee_id: uuid.UUID) -> Employee:
+        employee = await self.get_employee_or_404(employee_id)
+        changed = self._apply_activation_side_effects(employee)
+
+        if changed:
+            try:
+                await self.db.commit()
+            except Exception as exc:
+                await self.db.rollback()
+                logger.exception(
+                    "Failed to activate employee with links: employee_id=%s",
+                    employee_id,
+                )
+                raise DatabaseException("Failed to activate employee") from exc
+
+        updated = await self.get_employee_by_id(employee_id)
+        if updated is None:
+            raise DatabaseException("Failed to reload activated employee")
+        return updated
 
 
 def get_employee_repo(db: AsyncSession = Depends(get_db)) -> EmployeeRepo:

@@ -25,6 +25,10 @@ class AIServerPaths:
         return f"{AIServerPaths.FACES_BASE}/{staff_id}/deactivate"
 
     @staticmethod
+    def activate_person(staff_id: str) -> str:
+        return f"{AIServerPaths.FACES_BASE}/{staff_id}/activate"
+
+    @staticmethod
     def enrolled_status(staff_id: str) -> str:
         return f"{AIServerPaths.FACES_BASE}/{staff_id}/status"
 
@@ -75,6 +79,13 @@ class AIDeletePersonResponse(BaseModel):
 
 class AIDeactivatePersonResponse(BaseModel):
     deactivated: bool
+    staff_id: str
+    vectors_updated: int
+    is_active: bool
+
+
+class AIActivatePersonResponse(BaseModel):
+    activated: bool
     staff_id: str
     vectors_updated: int
     is_active: bool

@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from src.core.clients.face_server.schemas import (
+    AIActivatePersonResponse,
     AIAddPhotoResponse,
     AICancelEnrollmentResponse,
     AICommitRequest,
@@ -92,6 +93,14 @@ class FaceServerClient:
         )
         logger.debug(f"deactivate_person response: {data}")
         return AIDeactivatePersonResponse.model_validate(data)
+
+    async def activate_person(self, staff_id: str) -> AIActivatePersonResponse:
+        data = await self._request_json(
+            method="PATCH",
+            path=AIServerPaths.activate_person(staff_id),
+        )
+        logger.debug(f"activate_person response: {data}")
+        return AIActivatePersonResponse.model_validate(data)
 
     async def check_enrolled_status(self, staff_id: str) -> AIEnrolledStatusResponse:
         data = await self._request_json(

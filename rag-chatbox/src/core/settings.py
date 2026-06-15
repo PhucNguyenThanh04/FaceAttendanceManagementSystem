@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     # LLM
     google_api_key: str
     gemini_model: str = "gemini-1.5-flash"
+    llm_temperature: float = 0.1
+    llm_max_output_tokens: int = 2048
+    llm_timeout: float = 30.0
 
     # Qdrant
     qdrant_host: str = "localhost"
@@ -16,7 +19,8 @@ class Settings(BaseSettings):
     qdrant_collection_policy: str = "company_policy"
     qdrant_collection_law: str = "traffic_law"
     qdrant_timeout: float = 5.0
-    
+    qdrant_upsert_batch_size: int = 64
+
     dense_vector_name: str = "dense"
     sparse_vector_name: str = "sparse"
     bge_m3_dense_size: int = 1024

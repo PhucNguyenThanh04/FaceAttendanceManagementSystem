@@ -1,10 +1,13 @@
-from pathlib import Path
+from io import BytesIO
 from typing import Any
 
 from docx import Document as DocxDocument
 from docx.oxml.ns import qn
 
-from src.rag.ingestion.loaders.base_loader import BaseLoader, Document
+from src.rag.ingestion.loaders.base_loader import BaseLoader, Document, UploadFile
+from src.core.setup_logging import setup_logger
+
+logger = setup_logger(__name__)
 
 
 def _get_heading_level(paragraph) -> int | None:
@@ -37,13 +40,18 @@ class DocxLoader(BaseLoader):
 
     def load(
         self,
-        file_path: Path,
+        file: UploadFile,
         allowed_roles: list[Any] | None = None,
+        extra_metadata: dict[str, Any] | None = None,
     ) -> list[Document]:
+        filename = self._upload_filename(file, extra_metadata)
+
         try:
-            docx = DocxDocument(str(file_path))
+            self._reset_upload_file(file)
+            content = file.file.read()
+            docx = DocxDocument(BytesIO(content))
         except Exception as e:
-            raise ValueError(f"Cannot read DOCX '{file_path.name}': {e}") from e
+            raise ValueError(f"Cannot read DOCX '{filename}': {e}") from e
 
         docs: list[Document] = []
 
@@ -60,15 +68,16 @@ class DocxLoader(BaseLoader):
                 return
             docs.append(Document(
                 content=text,
-                metadata=self._with_allowed_roles(
+                metadata=self._build_metadata(
                     {
-                        "source":          file_path.name,
+                        "source_file":     filename,
                         "doc_type":        "docx",
                         "section":         current_heading,
                         "heading_level":   current_heading_level,
                         "section_index":   section_index,
                     },
                     allowed_roles,
+                    extra_metadata,
                 ),
             ))
             section_index += 1
@@ -93,6 +102,8 @@ class DocxLoader(BaseLoader):
         _flush()
 
         if not docs:
-            raise ValueError(f"'{file_path.name}' has no extractable content.")
+            logger.warning(f"'{filename}' has no extractable content.")
+            raise ValueError(f"'{filename}' has no extractable content.")
 
+        logger.info(f"Loaded {len(docs)} sections from DOCX '{filename}'")
         return docs

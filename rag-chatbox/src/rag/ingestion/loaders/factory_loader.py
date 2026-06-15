@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any
 
-from src.rag.ingestion.loaders.base_loader import BaseLoader, Document
+from src.rag.ingestion.loaders.base_loader import BaseLoader, Document, UploadFile
 from src.rag.ingestion.loaders.pdf_loader import PDFLoader
 from src.rag.ingestion.loaders.docx_loader import DocxLoader
 from src.rag.ingestion.loaders.txt_loader import TxtLoader
@@ -25,7 +25,11 @@ class LoaderFactory:
     - Dễ mock trong tests
 
     Usage:
-        docs = LoaderFactory.load(Path("noi_quy.pdf"), allowed_roles=allowed_roles)
+        docs = LoaderFactory.load(
+            file,
+            allowed_roles=allowed_roles,
+            extra_metadata={"document_id": "..."},
+        )
 
         # Hoặc lấy loader instance nếu cần inspect:
         loader = LoaderFactory.get_loader(".pdf")
@@ -37,6 +41,11 @@ class LoaderFactory:
 
     # extension → loader class (chưa instantiate)
     _registry: dict[str, type[BaseLoader]] = {}
+    _content_type_extensions: dict[str, str] = {
+        "application/pdf": ".pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+        "text/plain": ".txt",
+    }
 
     @classmethod
     def register(cls, extension: str, loader_class: type[BaseLoader]) -> None:
@@ -64,18 +73,41 @@ class LoaderFactory:
     @classmethod
     def load(
         cls,
-        file_path: Path,
+        file: UploadFile,
         allowed_roles: list[Any] | None = None,
+        extra_metadata: dict[str, Any] | None = None,
     ) -> list[Document]:
         """
-        Load file từ path, tự chọn loader phù hợp.
+        Load UploadFile, tự chọn loader phù hợp theo filename/extension.
         Đây là method chính — hầu hết code sẽ gọi cái này.
         """
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
+        extension = cls._detect_extension(file, extra_metadata)
 
-        loader = cls.get_loader(file_path.suffix)
-        return loader.load(file_path, allowed_roles=allowed_roles)
+        loader = cls.get_loader(extension)
+        return loader.load(
+            file,
+            allowed_roles=allowed_roles,
+            extra_metadata=extra_metadata,
+        )
+
+    @classmethod
+    def _detect_extension(
+        cls,
+        file: UploadFile,
+        extra_metadata: dict[str, Any] | None = None,
+    ) -> str:
+        upload_filename = str(getattr(file, "filename", "") or "")
+        extension = Path(upload_filename).suffix.lower()
+        if extension:
+            return extension
+
+        metadata_filename = str((extra_metadata or {}).get("filename") or "")
+        extension = Path(metadata_filename).suffix.lower()
+        if extension:
+            return extension
+
+        content_type = str(getattr(file, "content_type", "") or "")
+        return cls._content_type_extensions.get(content_type, "")
 
     @classmethod
     def supported_extensions(cls) -> list[str]:
@@ -86,3 +118,21 @@ class LoaderFactory:
 LoaderFactory.register(".pdf",  PDFLoader)
 LoaderFactory.register(".docx", DocxLoader)
 LoaderFactory.register(".txt",  TxtLoader)
+
+
+
+"""
+sau khi loader thì có meta data:
+
+{
+    "document_id": "...",
+    "filename": "...",
+    "file_path": "...",              # path bên api-service, chỉ để metadata/citation
+    "api_file_path": "...",
+    "original_file_path": "...",
+    "allowed_roles": [...],
+    "source_file": "...",            # tên file upload, không phải path để đọc
+    "doc_type": "pdf|docx|txt"
+}
+
+"""

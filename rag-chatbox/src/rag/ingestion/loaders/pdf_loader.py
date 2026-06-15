@@ -1,11 +1,14 @@
 import re
-from pathlib import Path
 from typing import Any
 
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
-from src.rag.ingestion.loaders.base_loader import BaseLoader, Document
+from src.rag.ingestion.loaders.base_loader import BaseLoader, Document, UploadFile
+
+from src.core.setup_logging import setup_logger
+
+logger = setup_logger(__name__)
 
 # Regex nhận diện ranh giới "Điều X" trong văn bản pháp luật VN
 _DIEU_PATTERN = re.compile(r"(Điều\s+\d+[\.\:])", re.UNICODE)
@@ -15,13 +18,17 @@ class PDFLoader(BaseLoader):
 
     def load(
         self,
-        file_path: Path,
+        file: UploadFile,
         allowed_roles: list[Any] | None = None,
+        extra_metadata: dict[str, Any] | None = None,
     ) -> list[Document]:
+        filename = self._upload_filename(file, extra_metadata)
+
         try:
-            reader = PdfReader(str(file_path))
+            self._reset_upload_file(file)
+            reader = PdfReader(file.file)
         except PdfReadError as e:
-            raise ValueError(f"Cannot read PDF '{file_path.name}': {e}") from e
+            raise ValueError(f"Cannot read PDF '{filename}': {e}") from e
 
         total_pages = len(reader.pages)
         docs: list[Document] = []
@@ -38,9 +45,9 @@ class PDFLoader(BaseLoader):
 
             docs.append(Document(
                 content=text.strip(),
-                metadata=self._with_allowed_roles(
+                metadata=self._build_metadata(
                     {
-                        "source":       file_path.name,
+                        "source_file":  filename,
                         "doc_type":     "pdf",
                         "page":         page_num,
                         "total_pages":  total_pages,
@@ -48,13 +55,15 @@ class PDFLoader(BaseLoader):
                         "dieu_refs":    dieu_matches if dieu_matches else [],
                     },
                     allowed_roles,
+                    extra_metadata,
                 ),
             ))
 
         if not docs:
             raise ValueError(
-                f"'{file_path.name}' appears to be a scanned PDF (no text layer). "
+                f"'{filename}' appears to be a scanned PDF (no text layer). "
                 "OCR is required for this file type."
             )
+        logger.info(f"Loaded {len(docs)} pages from PDF '{filename}'")
 
         return docs

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import cv2
 import numpy as np
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException

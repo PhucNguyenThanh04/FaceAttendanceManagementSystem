@@ -10,6 +10,11 @@ from qdrant_client import QdrantClient, models
 from src.integrations.qdrant.client import DENSE_VECTOR_NAME, SPARSE_VECTOR_NAME
 from src.rag.ingestion.chunkers.base_chunker import DocumentChunk
 
+from src.core.settings import settings
+from src.core.setup_logging import setup_logger
+
+logger = setup_logger(__name__)
+
 
 @dataclass
 class QdrantSearchResult:
@@ -21,12 +26,6 @@ class QdrantSearchResult:
 
 
 class QdrantVectorStore:
-    """
-    Small persistence/retrieval adapter around Qdrant.
-
-    Ingestion code passes chunks and vectors here.
-    Retrieval code passes query vectors and filters here.
-    """
 
     def __init__(
         self,
@@ -44,7 +43,7 @@ class QdrantVectorStore:
         chunks: Sequence[DocumentChunk],
         dense_vectors: Sequence[Sequence[float]],
         sparse_vectors: Sequence[models.SparseVector] | None = None,
-        batch_size: int = 64,
+        batch_size: int = settings.qdrant_upsert_batch_size,
         wait: bool = True,
     ) -> int:
         self._validate_vector_lengths(chunks, dense_vectors, sparse_vectors)
@@ -76,6 +75,22 @@ class QdrantVectorStore:
             total += len(batch_points)
 
         return total
+
+    def upsert_points(
+        self,
+        collection_name: str,
+        points: Sequence[models.PointStruct],
+        wait: bool = True,
+    ) -> int:
+        if not points:
+            return 0
+
+        self.client.upsert(
+            collection_name=collection_name,
+            points=list(points),
+            wait=wait,
+        )
+        return len(points)
 
     def search_dense(
         self,

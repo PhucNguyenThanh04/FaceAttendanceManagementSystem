@@ -1,8 +1,13 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any
+import json
+from typing import Any, TYPE_CHECKING
 import unicodedata
+
+if TYPE_CHECKING:
+    from fastapi import UploadFile
+else:
+    UploadFile = Any
 
 
 @dataclass
@@ -26,28 +31,97 @@ class BaseLoader(ABC):
     @abstractmethod
     def load(
         self,
-        file_path: Path,
+        file: UploadFile,
         allowed_roles: list[Any] | None = None,
+        extra_metadata: dict[str, Any] | None = None,
     ) -> list[Document]:
         """
-        Load file, trả về list[Document].
+        Load UploadFile do api-service gửi sang, trả về list[Document].
         Mỗi Document là một đơn vị logic: 1 trang PDF, 1 section DOCX, v.v.
         KHÔNG chunk ở đây — chunker làm việc đó.
+
+        extra_metadata chứa metadata nghiệp vụ do api-service gửi sang
+        như document_id, filename, file_path, allowed_roles.
         """
         ...
 
     def _is_empty(self, text: str) -> bool:
         return not text or not text.strip()
 
+    def _build_metadata(
+        self,
+        metadata: dict[str, Any],
+        allowed_roles: list[Any] | None,
+        extra_metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        api_metadata = self._normalize_extra_metadata(extra_metadata)
+        roles = allowed_roles
+        if roles is None:
+            roles = api_metadata.get("allowed_roles")
+
+        return {
+            **api_metadata,
+            **metadata,
+            "allowed_roles": self._normalize_roles(roles),
+        }
+
     def _with_allowed_roles(
         self,
         metadata: dict[str, Any],
         allowed_roles: list[Any] | None,
     ) -> dict[str, Any]:
-        return {
-            **metadata,
-            "allowed_roles": [
-                role.value if hasattr(role, "value") else str(role)
-                for role in (allowed_roles or [])
-            ],
-        }
+        return self._build_metadata(metadata, allowed_roles)
+
+    def _normalize_roles(self, roles: Any) -> list[str]:
+        if roles is None:
+            return []
+
+        if isinstance(roles, str):
+            raw_roles = roles.strip()
+            if not raw_roles:
+                return []
+
+            try:
+                decoded = json.loads(raw_roles)
+            except json.JSONDecodeError:
+                decoded = [role.strip() for role in raw_roles.split(",")]
+
+            roles = decoded
+
+        if not isinstance(roles, (list, tuple, set)):
+            roles = [roles]
+
+        return [
+            role.value if hasattr(role, "value") else str(role)
+            for role in roles
+            if str(role).strip()
+        ]
+
+    def _normalize_extra_metadata(
+        self,
+        extra_metadata: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        metadata = dict(extra_metadata or {})
+
+        api_file_path = metadata.get("file_path")
+        if api_file_path:
+            metadata.setdefault("api_file_path", api_file_path)
+            metadata.setdefault("original_file_path", api_file_path)
+
+        if "allowed_roles" in metadata:
+            metadata["allowed_roles"] = self._normalize_roles(
+                metadata.get("allowed_roles")
+            )
+
+        return metadata
+
+    def _upload_filename(
+        self,
+        file: UploadFile,
+        extra_metadata: dict[str, Any] | None = None,
+    ) -> str:
+        metadata = extra_metadata or {}
+        return str(metadata.get("filename") or file.filename or "uploaded_file")
+
+    def _reset_upload_file(self, file: UploadFile) -> None:
+        file.file.seek(0)

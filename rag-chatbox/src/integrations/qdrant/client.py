@@ -7,6 +7,9 @@ from qdrant_client import QdrantClient, models
 from src.core.settings import settings
 
 
+DENSE_VECTOR_NAME = settings.dense_vector_name
+SPARSE_VECTOR_NAME = settings.sparse_vector_name
+
 
 class QdrantClientManager:
     """

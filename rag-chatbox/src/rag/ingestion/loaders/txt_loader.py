@@ -1,8 +1,10 @@
-from pathlib import Path
 from typing import Any
 
-from src.rag.ingestion.loaders.base_loader import BaseLoader, Document
 
+from src.rag.ingestion.loaders.base_loader import BaseLoader, Document, UploadFile
+from src.core.setup_logging import setup_logger
+
+logger = setup_logger(__name__)
 # Thứ tự thử encoding: UTF-8 trước, sau đó Windows Vietnamese (CP1258),
 # sau đó Latin-1 làm fallback cuối cùng (không bao giờ raise UnicodeDecodeError)
 _ENCODINGS = ["utf-8", "cp1258", "latin-1"]
@@ -20,10 +22,12 @@ class TxtLoader(BaseLoader):
 
     def load(
         self,
-        file_path: Path,
+        file: UploadFile,
         allowed_roles: list[Any] | None = None,
+        extra_metadata: dict[str, Any] | None = None,
     ) -> list[Document]:
-        content = self._read_with_encoding_fallback(file_path)
+        filename = self._upload_filename(file, extra_metadata)
+        content = self._read_upload_with_encoding_fallback(file)
 
         # Split theo paragraph (2+ newlines liên tiếp)
         # strip từng paragraph, bỏ qua paragraph rỗng
@@ -34,29 +38,34 @@ class TxtLoader(BaseLoader):
         ]
 
         if not paragraphs:
-            raise ValueError(f"'{file_path.name}' is empty.")
+            raise ValueError(f"'{filename}' is empty.")
+        logger.info(f"Loaded {len(paragraphs)} paragraphs from TXT '{filename}'")
 
         return [
             Document(
                 content=para,
-                metadata=self._with_allowed_roles(
+                metadata=self._build_metadata(
                     {
-                        "source":       file_path.name,
+                        "source_file":  filename,
                         "doc_type":     "txt",
                         "paragraph":    idx + 1,
                         "total_paras":  len(paragraphs),
                     },
                     allowed_roles,
+                    extra_metadata,
                 ),
             )
             for idx, para in enumerate(paragraphs)
         ]
 
-    def _read_with_encoding_fallback(self, file_path: Path) -> str:
+    def _read_upload_with_encoding_fallback(self, file: UploadFile) -> str:
+        self._reset_upload_file(file)
+        content = file.file.read()
+
         for encoding in _ENCODINGS:
             try:
-                return file_path.read_text(encoding=encoding)
+                return content.decode(encoding)
             except UnicodeDecodeError:
                 continue
         # Không bao giờ reach đây vì latin-1 decode được mọi byte
-        raise ValueError(f"Cannot decode '{file_path.name}'")
+        raise ValueError(f"Cannot decode '{file.filename}'")

@@ -22,3 +22,27 @@ class BaseChunker(ABC):
         Loader loads. Chunker chunks.
         """
         ...
+
+
+"""
+sau bước chunk thì meta data:
+
+{
+    "document_id": "doc_001",
+    "filename": "noi_quy.pdf",
+    "file_path": "/uploads/docs/noi_quy.pdf",
+    "api_file_path": "/uploads/docs/noi_quy.pdf",
+    "original_file_path": "/uploads/docs/noi_quy.pdf",
+    "allowed_roles": ["admin", "hr"],
+    "source_file": "noi_quy.pdf",
+    "doc_type": "pdf",
+    "page": 3,
+    "total_pages": 12,
+    "dieu_refs": ["Điều 5."],
+    "chunk_index": 0,
+    "chunk_level": "clause",
+    "clause_number": "1",
+    "clause_title": "Quy định chung"
+}
+
+"""

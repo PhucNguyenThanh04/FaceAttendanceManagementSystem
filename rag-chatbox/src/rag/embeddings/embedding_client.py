@@ -22,20 +22,32 @@ class EmbeddingClient:
     _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="bge_m3")
 
     def __init__(self) -> None:
+        self._device = self._resolve_device(settings.embedding_device)
         self._model = BGEM3FlagModel(
             settings.embedding_model,
-            use_fp16=settings.embedding_device == "gpu",
-            device=self._resolve_device(settings.embedding_device),
+            use_fp16=self._device == "cuda",
+            device=self._device,
         )
 
     @staticmethod
     def _resolve_device(device: str) -> str:
         return "cuda" if device == "gpu" else device
 
+    @property
+    def device(self) -> str:
+        return self._device
+
+    @property
+    def executor(self) -> ThreadPoolExecutor:
+        return self._executor
+
     # ------------------------------------------------------------------
     # Sync methods — KHÔNG gọi trực tiếp từ async code
     # Luôn đi qua EmbeddingService (có run_in_executor)
     # ------------------------------------------------------------------
+
+    def warmup(self) -> None:
+        self.embed_hybrid(["warmup embedding model"])
 
     def embed_dense(self, texts: list[str]) -> list[list[float]]:
         if not texts:

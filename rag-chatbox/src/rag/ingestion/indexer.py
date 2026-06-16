@@ -1,5 +1,4 @@
 from typing import Any
-import asyncio
 import logging
 
 from qdrant_client import models as qdrant_models
@@ -74,7 +73,7 @@ class DocumentIndexer:
             payload=payload,
         )
 
-    def _upsert_in_batches(
+    async def _upsert_in_batches(
         self,
         *,
         collection_name: str,
@@ -92,7 +91,7 @@ class DocumentIndexer:
         for start in range(0, len(points), effective_batch_size):
             end = start + effective_batch_size
             batch = points[start:end]
-            self.vector_store.upsert_points(
+            await self.vector_store.upsert_points(
                 collection_name=collection_name,
                 points=batch,
             )
@@ -162,7 +161,7 @@ class DocumentIndexer:
             )
             points.append(point)
 
-        self._upsert_in_batches(
+        await self._upsert_in_batches(
             collection_name=collection_name,
             points=points,
             batch_size=batch_size,
@@ -186,8 +185,7 @@ class DocumentIndexer:
         if not document_id.strip():
             raise ValueError("document_id must not be empty")
 
-        await asyncio.to_thread(
-            self.vector_store.delete_by_document_id,
+        await self.vector_store.delete_by_document_id(
             collection_name=collection_name,
             document_id=document_id,
         )

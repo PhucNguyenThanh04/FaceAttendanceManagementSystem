@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from src.features.documents.schemas import DocumentIngestResponse
 from src.features.documents.service import DocumentService, get_document_service

@@ -16,29 +16,28 @@ class Settings(BaseSettings):
     # Qdrant
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
-    qdrant_collection_policy: str = "company_policy"
-    qdrant_collection_law: str = "traffic_law"
+    qdrant_collection_policy: str 
     qdrant_timeout: float = 5.0
-    qdrant_upsert_batch_size: int = 64
+    qdrant_upsert_batch_size: int
 
-    dense_vector_name: str = "dense"
-    sparse_vector_name: str = "sparse"
-    bge_m3_dense_size: int = 1024
+    dense_vector_name: str
+    sparse_vector_name: str
+    bge_m3_dense_size: int
 
     # Embedding / reranking
-    embedding_model: str = "BAAI/bge-m3"
-    embedding_device: str = "gpu"  
-    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    embedding_model: str 
+    embedding_device: str
 
-    # Retrieval
-    retrieval_top_k: int = 20
-    rerank_top_n: int = 5
-    retrieval_score_threshold: float = 0.45
+    reranker_model: str 
+    reranker_device: str
+    retrieval_top_k: int
+    rerank_top_n: int
+    retrieval_score_threshold: float
 
     # API server
-    api_host: str = "0.0.0.0"
-    api_port: int = 8002
-    api_debug: bool = True
+    api_host: str
+    api_port: int
+    api_debug: bool
 
     # Optional web search
     tavily_api_key: str | None = None

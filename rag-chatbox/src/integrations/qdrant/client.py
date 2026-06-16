@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from qdrant_client import QdrantClient, models
+from qdrant_client import AsyncQdrantClient, models
 
 from src.core.settings import settings
 
@@ -27,7 +27,7 @@ class QdrantClientManager:
         dense_vector_name: str = settings.dense_vector_name,
         sparse_vector_name: str = settings.sparse_vector_name,
     ) -> None:
-        self._client = QdrantClient(
+        self._client = AsyncQdrantClient(
             url=url or settings.qdrant_url,
             timeout=timeout or settings.qdrant_timeout,
         )
@@ -35,14 +35,17 @@ class QdrantClientManager:
         self.dense_vector_name = dense_vector_name
         self.sparse_vector_name = sparse_vector_name
 
-    def get_client(self) -> QdrantClient:
+    def get_client(self) -> AsyncQdrantClient:
         return self._client
 
-    def ensure_collection(self, collection_name: str) -> None:
-        if self._collection_exists(collection_name):
+    async def close(self) -> None:
+        await self._client.close()
+
+    async def ensure_collection(self, collection_name: str) -> None:
+        if await self._collection_exists(collection_name):
             return
 
-        self._client.create_collection(
+        await self._client.create_collection(
             collection_name=collection_name,
             vectors_config={
                 self.dense_vector_name: models.VectorParams(
@@ -55,24 +58,24 @@ class QdrantClientManager:
             },
         )
 
-    def ensure_default_collections(self) -> None:
-        self.ensure_collections(
+    async def ensure_default_collections(self) -> None:
+        await self.ensure_collections(
             [
                 settings.qdrant_collection_policy,
                 settings.qdrant_collection_law,
             ]
         )
 
-    def ensure_collections(self, collection_names: Sequence[str]) -> None:
+    async def ensure_collections(self, collection_names: Sequence[str]) -> None:
         for collection_name in collection_names:
-            self.ensure_collection(collection_name)
+            await self.ensure_collection(collection_name)
 
-    def _collection_exists(self, collection_name: str) -> bool:
+    async def _collection_exists(self, collection_name: str) -> bool:
         if hasattr(self._client, "collection_exists"):
-            return bool(self._client.collection_exists(collection_name))
+            return bool(await self._client.collection_exists(collection_name))
 
         try:
-            self._client.get_collection(collection_name)
+            await self._client.get_collection(collection_name)
         except Exception:
             return False
         return True

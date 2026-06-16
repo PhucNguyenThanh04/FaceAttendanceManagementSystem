@@ -1,10 +1,3 @@
-"""
-Gemini LLM client wrapper.
-
-Module này chỉ chịu trách nhiệm gọi google-generativeai SDK và chuẩn hóa
-response. Các logic retry/cost tracking/observability nâng cao nên nằm ở
-tầng service riêng.
-"""
 
 from __future__ import annotations
 
@@ -23,7 +16,6 @@ else:
     _GENAI_IMPORT_ERROR = None
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass(frozen=True)
 class LLMResponse:
@@ -101,7 +93,6 @@ class GeminiClient:
         max_output_tokens: int | None = None,
         response_mime_type: str | None = None,
     ) -> LLMResponse:
-        """Gọi Gemini và trả response chuẩn hóa."""
         model = (
             genai.GenerativeModel(
                 model_name=self.model_name,
@@ -115,12 +106,14 @@ class GeminiClient:
             max_output_tokens=max_output_tokens,
             response_mime_type=response_mime_type,
         )
-
-        return await self._call_once(
+        
+        response = await self._call_once(
             model=model,
             prompt=prompt,
             generation_config=generation_config,
         )
+        logger.info("Gemini response: %s", response.content)
+        return response
 
     async def generate_json(
         self,
@@ -129,11 +122,6 @@ class GeminiClient:
         temperature: float | None = 0.0,
         max_output_tokens: int | None = None,
     ) -> LLMResponse:
-        """
-        Gọi Gemini với JSON MIME type.
-
-        Caller vẫn nên validate `response.content` bằng json/Pydantic.
-        """
         return await self.generate(
             prompt=prompt,
             system_prompt=system_prompt,

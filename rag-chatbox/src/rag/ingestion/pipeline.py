@@ -68,7 +68,7 @@ class IngestionPipeline:
         chunks = await self._chunk_documents(documents)
 
         if self.qdrant_manager is not None:
-            self.qdrant_manager.ensure_collection(collection)
+            await self.qdrant_manager.ensure_collection(collection)
 
         indexed_count = await self._index_chunks(
             collection_name=collection,

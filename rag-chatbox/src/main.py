@@ -15,6 +15,7 @@ from src.rag.ingestion.chunkers.legachunker import LegalStructureAwareChunker
 from src.rag.ingestion.indexer import DocumentIndexer
 from src.rag.ingestion.loaders.factory_loader import LoaderFactory
 from src.rag.ingestion.pipeline import IngestionPipeline
+from src.rag.retrieval.reranker import RerankerClient, RerankerService
 
 logger = setup_logger(
     __name__,
@@ -35,8 +36,15 @@ async def lifespan(app: FastAPI):
 
     # --- Qdrant ---
     qdrant_manager = QdrantClientManager()
-    qdrant_manager.ensure_collection(settings.default_qdrant_collection)
+    await qdrant_manager.ensure_collection(settings.default_qdrant_collection)
     vector_store = QdrantVectorStore(qdrant_manager.get_client())
+
+    # --- Reranker ---
+    reranker_client = RerankerClient()
+    reranker_service = RerankerService(reranker_client)
+    logger.info("Warming up reranker model on device: %s", reranker_client.device)
+    await reranker_service.warmup()
+    logger.info("Reranker model warmup completed")
 
     # --- Ingestion pipeline ---
     ingestion_pipeline = IngestionPipeline(
@@ -45,20 +53,20 @@ async def lifespan(app: FastAPI):
         indexer=DocumentIndexer(embedding_service, vector_store),
         qdrant_manager=qdrant_manager,
     )
-
-    # Chỉ lưu những gì route cần dùng trực tiếp:
-    # - embedding_service: retriever dùng để embed query lúc query-time
-    # - ingestion_pipeline: ingest routes dùng
-    # qdrant_manager và vector_store không cần lưu riêng vì
-    # không có route nào gọi chúng trực tiếp.
+    
+    # Lưu services lên app.state để routes/DI dùng:
     app.state.embedding_service = embedding_service
+    app.state.vector_store = vector_store
+    app.state.reranker_service = reranker_service
     app.state.ingestion_pipeline = ingestion_pipeline
+    app.state.qdrant_manager = qdrant_manager
 
     logger.info("RAG service ready")
 
     yield
 
     logger.info("Shutting down RAG service")
+    await qdrant_manager.close()
 
 
 def create_app() -> FastAPI:

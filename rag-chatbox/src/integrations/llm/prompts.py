@@ -1,6 +1,4 @@
 """
-src/integrations/llm/prompts.py
-
 Prompt templates cho Agentic RAG Chatbox - hệ thống HR/chấm công.
 
 Nguyên tắc thiết kế:

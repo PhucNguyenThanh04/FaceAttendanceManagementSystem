@@ -85,13 +85,12 @@ def get_settings() -> Settings:
     return Settings()
 
     
-# shortcut toàn app
-settings = get_settings()
 
 
 
 if __name__ == "__main__":
     # Test load settings
+    settings = get_settings()
     print("Gemini Model:", settings.gemini_model)
     print("Qdrant URL:", settings.qdrant_url)
     print("Policy Collection:", settings.qdrant_collection_policy)

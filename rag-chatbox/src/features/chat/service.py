@@ -7,7 +7,7 @@ from src.core.dependenci import (
     get_reranker_service,
     get_vector_store,
 )
-from src.core.settings import settings
+from src.core.settings import get_settings
 from src.features.chat.schemas import (
     ChatCitation,
     ChatRequest,
@@ -23,6 +23,8 @@ from src.rag.embeddings.embedding_service import EmbeddingService
 from src.rag.retrieval.context_builder import ContextBuilder, ContextCitation
 from src.rag.retrieval.hybrid_retriever import HybridRetriever
 from src.rag.retrieval.reranker import RerankerService
+
+settings = get_settings()
 
 
 NO_CONTEXT_ANSWER = "Không tìm thấy thông tin phù hợp trong tài liệu nội bộ."

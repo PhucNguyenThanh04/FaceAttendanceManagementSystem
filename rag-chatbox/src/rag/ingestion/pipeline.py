@@ -15,7 +15,9 @@ from src.integrations.qdrant.client import QdrantClientManager
 
 
 from src.core.setup_logging import setup_logger
-from src.core.settings import settings
+from src.core.settings import get_settings
+
+settings = get_settings()
 
 logger = setup_logger(__name__)
 

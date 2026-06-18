@@ -7,9 +7,11 @@ import asyncio
 
 from FlagEmbedding import FlagReranker
 
-from src.core.settings import settings
+from src.core.settings import get_settings
 from src.core.setup_logging import setup_logger
 from src.integrations.qdrant.store import QdrantSearchResult
+
+settings = get_settings()
 
 logger = setup_logger(__name__)
 
@@ -164,4 +166,3 @@ class RerankerService:
     async def _run(self, func, *args):
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(self._client.executor, func, *args)
-

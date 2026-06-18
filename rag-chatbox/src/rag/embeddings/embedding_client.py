@@ -7,7 +7,9 @@ from functools import lru_cache
 from FlagEmbedding import BGEM3FlagModel
 from qdrant_client import models
 
-from src.core.settings import settings
+from src.core.settings import get_settings
+
+settings = get_settings()
 
 
 @dataclass

@@ -284,7 +284,9 @@ class GeminiClient:
 @lru_cache(maxsize=1)
 def get_gemini_client() -> GeminiClient:
     """Factory dùng settings toàn app."""
-    from src.core.settings import settings
+    from src.core.settings import get_settings
+
+    settings = get_settings()
 
     return GeminiClient(
         api_key=settings.google_api_key,

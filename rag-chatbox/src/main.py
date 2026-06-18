@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from src.core.settings import settings
+from src.core.settings import get_settings
 from src.core.setup_logging import setup_logger
 from src.integrations.qdrant.client import QdrantClientManager
 from src.integrations.qdrant.store import QdrantVectorStore
@@ -16,6 +16,8 @@ from src.rag.ingestion.indexer import DocumentIndexer
 from src.rag.ingestion.loaders.factory_loader import LoaderFactory
 from src.rag.ingestion.pipeline import IngestionPipeline
 from src.rag.retrieval.reranker import RerankerClient, RerankerService
+
+settings = get_settings()
 
 logger = setup_logger(
     __name__,

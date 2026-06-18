@@ -84,18 +84,31 @@ class BaseLoader(ABC):
             try:
                 decoded = json.loads(raw_roles)
             except json.JSONDecodeError:
-                decoded = [role.strip() for role in raw_roles.split(",")]
+                decoded = raw_roles
 
             roles = decoded
 
         if not isinstance(roles, (list, tuple, set)):
             roles = [roles]
 
-        return [
-            role.value if hasattr(role, "value") else str(role)
-            for role in roles
-            if str(role).strip()
-        ]
+        normalized_roles: list[str] = []
+        for role in roles:
+            role_value = role.value if hasattr(role, "value") else role
+            if role_value is None:
+                continue
+
+            if isinstance(role_value, str):
+                role_parts = role_value.split(",")
+            else:
+                role_parts = [str(role_value)]
+
+            normalized_roles.extend(
+                role_part.strip()
+                for role_part in role_parts
+                if role_part.strip()
+            )
+
+        return normalized_roles
 
     def _normalize_extra_metadata(
         self,

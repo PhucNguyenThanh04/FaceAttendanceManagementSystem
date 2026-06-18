@@ -5,7 +5,9 @@ from src.rag.embeddings.embedding_service import EmbeddingService
 from src.integrations.qdrant.store import QdrantVectorStore
 from src.rag.retrieval.reranker import RerankerService
 
-from src.core.settings import settings
+from src.core.settings import get_settings
+
+settings = get_settings()
 
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 

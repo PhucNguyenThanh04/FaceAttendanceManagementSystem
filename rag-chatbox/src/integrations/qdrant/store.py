@@ -7,7 +7,6 @@ from qdrant_client import AsyncQdrantClient, models
 
 from src.integrations.qdrant.client import DENSE_VECTOR_NAME, SPARSE_VECTOR_NAME
 
-from src.core.settings import settings
 from src.core.setup_logging import setup_logger
 
 logger = setup_logger(__name__)

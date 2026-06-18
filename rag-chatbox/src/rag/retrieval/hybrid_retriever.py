@@ -5,8 +5,10 @@ import time
 from src.integrations.qdrant.store import QdrantSearchResult, QdrantVectorStore
 from src.rag.embeddings.embedding_service import EmbeddingService
 
-from src.core.settings import settings
+from src.core.settings import get_settings
 from src.core.setup_logging import setup_logger
+
+settings = get_settings()
 
 logger = setup_logger(__name__)
 

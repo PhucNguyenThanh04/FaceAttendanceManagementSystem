@@ -6,7 +6,6 @@ from src.rag.ingestion.pipeline import IngestionPipeline
 from src.core.dependenci import get_ingestion_pipeline
 from src.features.documents.schemas import DocumentIngestResponse
 
-from src.core.settings import settings
 from src.core.setup_logging import setup_logger
 
 logger = setup_logger(__name__)

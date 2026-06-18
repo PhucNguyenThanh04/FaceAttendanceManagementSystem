@@ -4,8 +4,9 @@ from collections.abc import Sequence
 
 from qdrant_client import AsyncQdrantClient, models
 
-from src.core.settings import settings
+from src.core.settings import get_settings
 
+settings = get_settings()
 
 DENSE_VECTOR_NAME = settings.dense_vector_name
 SPARSE_VECTOR_NAME = settings.sparse_vector_name

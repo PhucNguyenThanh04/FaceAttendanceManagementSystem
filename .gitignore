@@ -89,6 +89,7 @@ frontend/dist-ssr/
 *.log
 logs/
 *.pid
+.codex
 *.pid.lock
 *.out
 *.err

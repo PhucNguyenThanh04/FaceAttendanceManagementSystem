@@ -7,6 +7,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator
 
+from src.api.v1.shared.datetime_utils import AppTimezoneModel
+
 
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 PHONE_PATTERN = r"^\+?[0-9]{8,15}$"
@@ -54,7 +56,7 @@ class EmployeeOnboardingStartSessionRequest(BaseModel):
 
 
 
-class EmployeeOnboardingStartSessionResponse(BaseModel):
+class EmployeeOnboardingStartSessionResponse(AppTimezoneModel):
     session_id: str
     status: OnboardingSessionStatus
     expires_at: datetime
@@ -92,7 +94,7 @@ class EmployeeOnboardingCancelResponse(BaseModel):
     status: OnboardingSessionStatus
 
 
-class EmployeeOnboardingSessionDetailResponse(BaseModel):
+class EmployeeOnboardingSessionDetailResponse(AppTimezoneModel):
     session_id: str
     status: OnboardingSessionStatus
     email: str

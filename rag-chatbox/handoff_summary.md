@@ -1,93 +1,121 @@
 # Handoff Summary — RAG Chatbox
 
-## 1. Project Goal
-Agentic RAG chatbot for HR/attendance management (Vietnamese). Built with FastAPI + Gemini 1.5 Flash + Qdrant (BGE-M3 hybrid embeddings). Part of `FaceAttendanceManagementSystem` monorepo.
+## 1. Project goal
 
-**Workspace:** `/home/thanh-phuc/PycharmProjects/FaceAttendanceManagementSystem/rag-chatbox/`
+`rag-chatbox` là FastAPI microservice cho chatbot RAG nội bộ của hệ thống HR/chấm công. Mục tiêu: nhận tài liệu chính sách/nội quy tiếng Việt, index vào Qdrant bằng BGE-M3 dense+sparse embeddings, rồi trả lời câu hỏi nhân viên/HR bằng Gemini với citation theo tài liệu nội bộ.
 
-## 2. Current Architecture
+## 2. Current architecture
 
-```
-Ingestion (✅ DONE):
-  Upload → LoaderFactory → LegalStructureAwareChunker → DocumentIndexer → Qdrant
+Runtime chính:
 
-Query-time (IN PROGRESS):
-  Query → HybridRetriever → [Reranker] → [ContextBuilder] → [PromptBuilder] → [GeminiClient] → Answer
-                ✅              ❌            ❌               ✅ exists         ✅ exists
-```
-
-**Key design decisions made this session:**
-- **AsyncQdrantClient** — all Qdrant interactions are native async (no `asyncio.to_thread`)
-- **Post-filter permissions** — retrieve ALL chunks first (no role filter), rerank, THEN check `allowed_roles`. If best chunk is not accessible → tell user "không có quyền" instead of giving wrong answer from a less-relevant chunk
-- **Reranker will follow same pattern as Embedding** — sync model inference in `ThreadPoolExecutor`, wrapped by async service layer
-
-## 3. Files Changed This Session
-
-| File | Change |
-|---|---|
-| `integrations/qdrant/client.py` | `QdrantClient` → `AsyncQdrantClient`, all methods async, added `close()` |
-| `integrations/qdrant/store.py` | All methods async. Removed: `upsert_chunks`, `_build_point`, `_search_hybrid_fallback`, `_rrf_merge`, `_slice_sparse_vectors`, `_validate_vector_lengths`, `_point_id`, `payload` field from `QdrantSearchResult`. Simplified `search_hybrid` to call `query_points` directly (RRF server-side) |
-| `rag/ingestion/indexer.py` | `_upsert_in_batches` → async, removed `asyncio.to_thread` from `delete_document` |
-| `rag/ingestion/pipeline.py` | `ensure_collection` call → `await` |
-| `main.py` | `await ensure_collection`, store `qdrant_manager` on `app.state`, `await close()` on shutdown |
-| `rag/retrieval/hybrid_retriever.py` | **NEW** — `HybridRetriever.retrieve(query, collection, top_k)` — no `allowed_role` param |
-
-## 4. Public Interfaces Finalized
-
-```python
-# HybridRetriever — rag/retrieval/hybrid_retriever.py
-async def retrieve(query: str, collection_name: str | None, top_k: int | None) -> list[QdrantSearchResult]
-
-# QdrantSearchResult — integrations/qdrant/store.py
-@dataclass
-class QdrantSearchResult:
-    point_id: str
-    score: float
-    content: str
-    metadata: dict[str, Any]  # contains allowed_roles, filename, clause_number, etc.
-
-# QdrantVectorStore — async methods:
-async def upsert_points(collection_name, points, wait) -> int
-async def search_dense(collection_name, query_vector, top_k, allowed_role, metadata_filter) -> list[QdrantSearchResult]
-async def search_hybrid(collection_name, dense_query_vector, sparse_query_vector, top_k, ...) -> list[QdrantSearchResult]
-async def delete_by_document_id(collection_name, document_id, wait) -> None
-
-# QdrantClientManager — async methods:
-async def ensure_collection(collection_name) -> None
-async def close() -> None
+```text
+run.py -> src.main:app
+FastAPI lifespan
+  -> Redis ping
+  -> load/warmup EmbeddingClient(BGE-M3)
+  -> ensure Qdrant collection
+  -> load/warmup RerankerClient
+  -> build IngestionPipeline
+  -> store services in app.state
 ```
 
-## 5. Decisions Made
+API:
 
-1. **No pre-filter by role at retrieval** — permission check happens post-rerank in ContextBuilder/guardrails
-2. **Removed SDK compatibility fallbacks** — `qdrant-client==1.9.1` is pinned, no need for `hasattr` guards
-3. **RRF runs server-side** via `models.FusionQuery(fusion=models.Fusion.RRF)` — removed manual `_rrf_merge`
-4. **`vector_retriever.py` is redundant** — `HybridRetriever` already falls back to dense-only when `sparse=None`. User may want to delete it
-5. **Incremental coding rules** — user requires plan-before-code, one step at a time, no auto-completing modules
-6. **Reranker pattern** — will use `ThreadPoolExecutor` like `EmbeddingClient` (sync model, async wrapper)
+- `GET /health`
+- `POST /api/v1/rag/documents`: upload/index document
+- `POST /api/v1/chat`: retrieve/rerank/context/Gemini answer
 
-## 6. Known Bugs / TODO
+Ingestion flow:
 
-- `client.py` (`GeminiClient._call_once`) — missing generic `Exception` catch (unlike `generate_stream` which has it). Should add for production safety
-- `vector_retriever.py` — empty file, user agreed it's redundant but hasn't deleted yet
-- LangChain/LangGraph in `requirements.txt` but unused — dead dependencies
-
-## 7. Next Task — Implementation Plan
-
-**Agreed pipeline (user confirmed):**
-
-```
-Top-20 chunks (HybridRetriever ✅)
-  → 1. RERANK (reranker.py) ← NEXT
-  → 2. FILTER (permission check post-rerank)
-  → 3. CONTEXT WINDOW MANAGEMENT
-  → 4. PROMPT ENGINEERING (prompts.py ✅)
-  → 5. GENERATE (client.py ✅)
-  → 6. GROUNDING CHECK
-  → ANSWER + CITATIONS
+```text
+UploadFile + metadata
+  -> LoaderFactory(.pdf/.docx/.txt)
+  -> LegalStructureAwareChunker
+  -> DocumentIndexer
+  -> EmbeddingService(BGE-M3 dense+sparse)
+  -> QdrantVectorStore.upsert_points
 ```
 
-**Immediate next step:** Write `Reranker` in `src/rag/retrieval/reranker.py`
-- Cross-encoder model: `cross-encoder/ms-marco-MiniLM-L-6-v2` (already in settings)
-- Pattern: sync inference in `ThreadPoolExecutor`, async wrapper
-- Input: `query + list[QdrantSearchResult]` → Output: `list[QdrantSearchResult]` reranked
+Chat flow:
+
+```text
+question + user_role
+  -> HybridRetriever
+  -> Qdrant RRF dense+sparse search with allowed_role filter
+  -> RerankerService
+  -> ChatService quality filter
+  -> ContextBuilder
+  -> PromptBuilder.build_rag_prompt
+  -> GeminiClient.generate
+  -> ChatResponse(answer, citations, low_confidence, used_context)
+```
+
+Implemented core modules: `core`, `api/v1`, `features/chat`, `features/documents`, `rag/ingestion`, `rag/embeddings`, `rag/retrieval`, `integrations/llm`, `integrations/qdrant`, `integrations/cache`.
+
+Empty/planned modules: `agents`, `routing`, `tools`, `guardrails`, `observability`, `integrations/web_search/client.py`, `core/exceptions.py`.
+
+## 3. Files changed
+
+No source changes made in the last scan turn.
+
+Current handoff file updated:
+
+- `handoff_summary.md`
+
+Repo also has unrelated dirty files outside this service under `../api-service/`, plus local changes in `src/core/settings.py`, `src/core/dependenci.py`, `src/main.py`, and new `src/integrations/cache/` from prior work.
+
+## 4. Public interfaces đã chốt
+
+HTTP:
+
+- `POST /api/v1/rag/documents`
+  - multipart form: `document_id`, `filename`, `file_path`, `allowed_roles`, `file`
+  - returns `DocumentIngestResponse`
+- `POST /api/v1/chat`
+  - body: `ChatRequest(question: str, user_role: str)`
+  - returns `ChatResponse(answer, citations, low_confidence, used_context)`
+- Auth: `X-API-Key`, checked by `verify_api_key`.
+
+Internal:
+
+- `IngestionPipeline.ingestion(...) -> IngestionResult`
+- `LoaderFactory.load(file, allowed_roles, extra_metadata) -> list[Document]`
+- `LegalStructureAwareChunker.chunk(documents) -> list[DocumentChunk]`
+- `DocumentIndexer.index_chunks(...) -> int`
+- `EmbeddingService.embed_query_hybrid(query) -> EmbeddingBatch`
+- `QdrantVectorStore.search_hybrid(...) -> list[QdrantSearchResult]`
+- `RerankerService.rerank(query, results, top_n=None) -> list[QdrantSearchResult]`
+- `ContextBuilder.build(results, max_tokens=3000) -> ContextBuildResult`
+- `GeminiClient.generate(prompt, system_prompt=...) -> LLMResponse`
+
+## 5. Decisions made
+
+- Direct RAG pipeline is active; agent/planner/tool routing is scaffolded but unused.
+- Use BGE-M3 for both dense vectors and sparse lexical vectors.
+- Qdrant collection uses named vectors from settings: dense + sparse.
+- Hybrid retrieval uses Qdrant server-side RRF fusion via `FusionQuery`.
+- Permission filtering currently happens in Qdrant query using `allowed_role`.
+- Reranker and embedding model inference are sync model calls wrapped by async services with single-worker `ThreadPoolExecutor`.
+- Chunking is Vietnamese legal/policy aware: section -> clause/khoản -> point/điểm -> recursive fallback.
+- Chunk IDs are deterministic UUID v5 from source/section/content prefix for idempotent upsert.
+- Prompts are Vietnamese and instruct Gemini to answer only from supplied context, with citations.
+
+## 6. Known bugs/TODO
+
+- `src/integrations/cache/redis_client.py` references `settings.redis_db_session` and `settings.redis_session_url`, but `Settings` only defines `redis_host`, `redis_port`, `redis_password`, `redis_url`.
+- `QdrantClientManager.ensure_default_collections()` references `settings.qdrant_collection_law`, not defined in `Settings`.
+- `redis_client.py` imports `redis.asyncio`, but `requirements.txt` does not visibly include `redis`.
+- `ChatService` catches all unexpected router errors as HTTP 500 with raw exception text.
+- `ChatCitation` / `ChatResponse` use mutable default lists; prefer `Field(default_factory=list)`.
+- Existing `project_structure_analysis.md` is stale: it says chat/retrieval are empty, but current source implements them.
+- No test suite currently present for ingestion, retrieval, reranking, context budgeting, or API behavior.
+- Many planned agentic modules are still zero-byte placeholders.
+
+## 7. Next task
+
+Fix startup/config blockers first:
+
+1. Align Redis settings and `create_redis_async_client()`.
+2. Remove or define `qdrant_collection_law`.
+3. Confirm `redis` dependency in `requirements.txt`.
+4. Then run a minimal startup/import check and add focused tests for `ChatService`, `ContextBuilder`, and `LegalStructureAwareChunker`.

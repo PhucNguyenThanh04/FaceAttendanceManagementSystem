@@ -1,35 +1,24 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    field_serializer,
     field_validator,
     model_validator,
 )
 
+from src.api.v1.shared.datetime_utils import AppTimezoneModel
 from src.api.v1.shared.enums import RoleName, UserStatus
-from src.core.configs.settings import settings
 
 EMAIL_PATTERN = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
 PASSWORD_MIN_LENGTH = 8
-APP_TZ = ZoneInfo(settings.database_timezone)
 
 
-def to_app_timezone(value: datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(APP_TZ)
-
-
-class RoleRead(BaseModel):
+class RoleRead(AppTimezoneModel):
     model_config = ConfigDict(from_attributes=True)
 
     role_id: int
@@ -37,10 +26,6 @@ class RoleRead(BaseModel):
     description: str | None = None
     created_at: datetime
     updated_at: datetime
-
-    @field_serializer("created_at", "updated_at", when_used="json")
-    def serialize_role_datetimes(self, value: datetime) -> str:
-        return to_app_timezone(value).isoformat()
 
 
 class UserBase(BaseModel):
@@ -89,7 +74,7 @@ class UserUpdate(BaseModel):
             raise ValueError("Password must include at least one digit")
         return value
 
-class UserRead(BaseModel):
+class UserRead(AppTimezoneModel):
     model_config = ConfigDict(from_attributes=True)
 
     user_id: uuid.UUID
@@ -100,15 +85,6 @@ class UserRead(BaseModel):
     role: RoleRead
     created_at: datetime
     updated_at: datetime
-
-    @field_serializer("last_login_at", when_used="json")
-    def serialize_last_login_at(self, value: datetime | None) -> str | None:
-        converted = to_app_timezone(value)
-        return converted.isoformat() if converted else None
-
-    @field_serializer("created_at", "updated_at", when_used="json")
-    def serialize_user_datetimes(self, value: datetime) -> str:
-        return to_app_timezone(value).isoformat()
 
 
 class UserRoleAssignRequest(BaseModel):

@@ -5,13 +5,14 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from src.api.v1.shared.datetime_utils import AppTimezoneModel
 from src.api.v1.shared.enums import EmployeeStatus
 
 PHONE_PATTERN = r"^\+?[0-9]{8,15}$"
 GENDER_ALLOWED = {"male", "female", "other"}
 
 
-class EmployeeBase(BaseModel):
+class EmployeeBase(AppTimezoneModel):
     employee_code: str = Field(..., min_length=1, max_length=50)
     full_name: str = Field(..., min_length=1, max_length=120)
     phone: str | None = Field(default=None, pattern=PHONE_PATTERN)
@@ -85,7 +86,7 @@ class EmployeeUpdate(BaseModel):
         return self
 
 
-class EmployeeRead(BaseModel):
+class EmployeeRead(AppTimezoneModel):
     model_config = ConfigDict(from_attributes=True)
 
     employee_id: uuid.UUID

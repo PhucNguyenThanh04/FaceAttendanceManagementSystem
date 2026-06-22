@@ -5,10 +5,11 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.api.v1.shared.datetime_utils import AppTimezoneModel
 from src.api.v1.shared.enums import ApprovalAction, CorrectionRequestStatus
 
 
-class AttendanceCorrectionRequestBase(BaseModel):
+class AttendanceCorrectionRequestBase(AppTimezoneModel):
     employee_id: uuid.UUID
     attendance_record_id: uuid.UUID | None = None
     requested_check_in: datetime | None = None
@@ -71,7 +72,7 @@ class AttendanceCorrectionRequestRead(AttendanceCorrectionRequestBase):
     updated_at: datetime
 
 
-class AttendanceCorrectionLogBase(BaseModel):
+class AttendanceCorrectionLogBase(AppTimezoneModel):
     correction_request_id: uuid.UUID
     reviewer_id: uuid.UUID
     action: ApprovalAction

@@ -4,6 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from redis.exceptions import AuthenticationError
 
 from src.core.settings import get_settings
 from src.core.setup_logging import setup_logger
@@ -16,6 +17,9 @@ from src.rag.ingestion.indexer import DocumentIndexer
 from src.rag.ingestion.loaders.factory_loader import LoaderFactory
 from src.rag.ingestion.pipeline import IngestionPipeline
 from src.rag.retrieval.reranker import RerankerClient, RerankerService
+from src.integrations.cache.redis_client import create_redis_async_client
+from src.api.v1.routers import router as v1_router
+
 
 settings = get_settings()
 
@@ -29,46 +33,76 @@ logger = setup_logger(
 async def lifespan(app: FastAPI):
     logger.info("Starting up RAG service...")
 
-    # --- Embedding ---
-    client = EmbeddingClient()
-    embedding_service = EmbeddingService(client)
-    logger.info("Warming up embedding model on device: %s", client.device)
-    await embedding_service.warmup()
-    logger.info("Embedding model warmup completed")
+    try:
+        redis_client = create_redis_async_client()
+        try:
+            await redis_client.ping()
+        except AuthenticationError as exc:
+            # Redis server không bật password nhưng client lại gửi AUTH.
+            if "without any password configured" not in str(exc):
+                raise
 
-    # --- Qdrant ---
-    qdrant_manager = QdrantClientManager()
-    await qdrant_manager.ensure_collection(settings.default_qdrant_collection)
-    vector_store = QdrantVectorStore(qdrant_manager.get_client())
+            logger.warning(
+                "Redis AUTH bị từ chối vì server không cấu hình password; fallback no-auth."
+            )
+            await redis_client.aclose()
+            redis_client = create_redis_async_client(force_no_auth=True)
+            await redis_client.ping()
 
-    # --- Reranker ---
-    reranker_client = RerankerClient()
-    reranker_service = RerankerService(reranker_client)
-    logger.info("Warming up reranker model on device: %s", reranker_client.device)
-    await reranker_service.warmup()
-    logger.info("Reranker model warmup completed")
+        logger.info("Redis kết nối thành công")
 
-    # --- Ingestion pipeline ---
-    ingestion_pipeline = IngestionPipeline(
-        loader=LoaderFactory,
-        chunker=LegalStructureAwareChunker(),
-        indexer=DocumentIndexer(embedding_service, vector_store),
-        qdrant_manager=qdrant_manager,
-    )
-    
-    # Lưu services lên app.state để routes/DI dùng:
-    app.state.embedding_service = embedding_service
-    app.state.vector_store = vector_store
-    app.state.reranker_service = reranker_service
-    app.state.ingestion_pipeline = ingestion_pipeline
-    app.state.qdrant_manager = qdrant_manager
+        # --- Embedding ---
+        client = EmbeddingClient()
+        embedding_service = EmbeddingService(client)
+        logger.info("Warming up embedding model on device: %s", client.device)
+        await embedding_service.warmup()
+        logger.info("Embedding model warmup completed")
 
-    logger.info("RAG service ready")
+        # --- Qdrant ---
+        qdrant_manager = QdrantClientManager()
+        await qdrant_manager.ensure_collection(settings.default_qdrant_collection)
+        vector_store = QdrantVectorStore(qdrant_manager.get_client())
+        logger.info("Qdrant client initialized and collection ensured: %s", \
+                    settings.default_qdrant_collection)
 
-    yield
+        # --- Reranker ---
+        reranker_client = RerankerClient()
+        reranker_service = RerankerService(reranker_client)
+        logger.info("Warming up reranker model on device: %s", reranker_client.device)
+        await reranker_service.warmup()
+        logger.info("Reranker model warmup completed")
 
-    logger.info("Shutting down RAG service")
-    await qdrant_manager.close()
+        # --- Ingestion pipeline ---
+        ingestion_pipeline = IngestionPipeline(
+            loader=LoaderFactory,
+            chunker=LegalStructureAwareChunker(),
+            indexer=DocumentIndexer(embedding_service, vector_store),
+            qdrant_manager=qdrant_manager,
+        )
+        
+        # Lưu services lên app.state để routes/DI dùng:
+        app.state.embedding_service = embedding_service
+        app.state.vector_store = vector_store
+        app.state.reranker_service = reranker_service
+        app.state.ingestion_pipeline = ingestion_pipeline
+        app.state.qdrant_manager = qdrant_manager
+        app.state.redis = redis_client
+
+
+        logger.info("RAG service ready")
+
+        yield
+
+    except Exception:
+        logger.exception("Lỗi khởi tạo tài nguyên trong lifespan")
+        raise
+    finally:
+        if qdrant_manager is not None:
+            await qdrant_manager.close()
+            logger.info("Qdrant client đã đóng")
+        if redis_client is not None:
+            await redis_client.aclose()
+            logger.info("Redis client đã đóng")
 
 
 def create_app() -> FastAPI:
@@ -79,7 +113,6 @@ def create_app() -> FastAPI:
         debug=settings.api_debug,
     )
 
-    from src.api.v1.routers import router as v1_router
     app.include_router(v1_router)
 
     return app

@@ -5,10 +5,11 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.api.v1.shared.datetime_utils import AppTimezoneModel
 from src.api.v1.shared.enums import ApprovalAction, LeaveRequestStatus, LeaveTimeType
 
 
-class LeaveTypeBase(BaseModel):
+class LeaveTypeBase(AppTimezoneModel):
     name: str = Field(..., min_length=1, max_length=100)
     code: str | None = Field(default=None, min_length=1, max_length=30)
     is_paid: bool = True
@@ -38,7 +39,7 @@ class LeaveTypeRead(LeaveTypeBase):
     updated_at: datetime
 
 
-class LeaveRequestBase(BaseModel):
+class LeaveRequestBase(AppTimezoneModel):
     employee_id: uuid.UUID
     leave_type_id: int = Field(..., ge=1)
     start_date: date
@@ -125,7 +126,7 @@ class LeaveRequestRead(LeaveRequestBase):
     updated_at: datetime
 
 
-class LeaveApprovalLogBase(BaseModel):
+class LeaveApprovalLogBase(AppTimezoneModel):
     leave_request_id: uuid.UUID
     approver_id: uuid.UUID
     action: ApprovalAction

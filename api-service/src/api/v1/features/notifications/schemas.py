@@ -5,10 +5,11 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.api.v1.shared.datetime_utils import AppTimezoneModel
 from src.api.v1.shared.enums import NotificationType
 
 
-class NotificationBase(BaseModel):
+class NotificationBase(AppTimezoneModel):
     user_id: uuid.UUID
     title: str = Field(..., min_length=1, max_length=200)
     content: str | None = Field(default=None, max_length=2000)

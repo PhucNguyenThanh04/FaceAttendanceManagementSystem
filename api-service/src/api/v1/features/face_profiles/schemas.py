@@ -5,6 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.api.v1.shared.datetime_utils import AppTimezoneModel
 from src.api.v1.shared.enums import FaceProfileStatus
 
 
@@ -53,7 +54,7 @@ class FaceProfileUpdate(BaseModel):
         return self
 
 
-class FaceProfileRead(BaseModel):
+class FaceProfileRead(AppTimezoneModel):
     model_config = ConfigDict(from_attributes=True)
 
     profile_id: uuid.UUID

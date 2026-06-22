@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.api.v1.shared.datetime_utils import AppTimezoneModel
 from src.api.v1.shared.enums import (
     AttendanceEventType,
     AttendanceRecordStatus,
@@ -12,7 +13,7 @@ from src.api.v1.shared.enums import (
 )
 
 
-class AttendanceEventBase(BaseModel):
+class AttendanceEventBase(AppTimezoneModel):
     employee_id: uuid.UUID | None = None
     event_type: AttendanceEventType
     event_time: datetime
@@ -50,7 +51,7 @@ class AttendanceEventRead(AttendanceEventBase):
     created_at: datetime
 
 
-class AttendanceRecordBase(BaseModel):
+class AttendanceRecordBase(AppTimezoneModel):
     employee_id: uuid.UUID
     shift_id: int | None = Field(default=None, ge=1)
     work_date: date
@@ -101,7 +102,7 @@ class AttendanceRecordRead(AttendanceRecordBase):
     updated_at: datetime
 
 
-class AttendanceEventAcceptedResponse(BaseModel):
+class AttendanceEventAcceptedResponse(AppTimezoneModel):
     accepted: bool
     reason: str | None = None
     employee_id: uuid.UUID

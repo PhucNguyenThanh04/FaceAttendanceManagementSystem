@@ -5,10 +5,10 @@ from src.features.chat.schemas import ChatRequest, ChatResponse
 from src.features.chat.service import ChatService, get_chat_service
 
 
-router = APIRouter(prefix="/api/v1", tags=["Chat"], dependencies=[Depends(verify_api_key)])
+router = APIRouter(prefix="/api/v1/chat", tags=["Chat"], dependencies=[Depends(verify_api_key)])
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/message", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
     chat_service: ChatService = Depends(get_chat_service),

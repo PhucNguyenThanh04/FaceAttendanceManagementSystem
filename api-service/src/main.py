@@ -6,13 +6,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import httpx
 import logging
+
 from redis.exceptions import AuthenticationError
 from sqlalchemy import text
 from src.core.cache.redis_client import create_redis_async_client
 from src.core.bootstrap.admin_seed import ensure_bootstrap_admin
 from src.core.configs.settings import settings
 from src.core.db.database import engine
+from src.core.middleware.logging_middleware import LoggingMiddleware
+from src.core.middleware.timing_middleware import TimingMiddleware
+
 from src.core.exception_handlers import register_exception_handlers
+
 from src.utils.setup_logger import setup_logger
 
 
@@ -85,27 +90,34 @@ async def lifespan(app: FastAPI):
             logger.info("Redis client đã đóng")
 
 
-app = FastAPI(
+def create_app() -> FastAPI:
+    app = FastAPI(
     title="Face Attendance API",
     description="Hệ thống chấm công nhận diện khuôn mặt",
     version="1.0.0",
     docs_url="/docs" if settings.debug else None,   # tắt docs trên production
     redoc_url="/redoc" if settings.debug else None,
     lifespan=lifespan,
-)
+    )
 
-register_exception_handlers(app)
+    register_exception_handlers(app)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=parse_cors_origins(settings.cors_origins),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=parse_cors_origins(settings.cors_origins),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    app.add_middleware(LoggingMiddleware)
+    app.add_middleware(TimingMiddleware)
 
-app.include_router(api_router, prefix="/api/v1")
-app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+    app.include_router(api_router, prefix="/api/v1")
+    app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+
+    return app
+
+app = create_app()
 
 
 # ── Health check ──────────────────────────────────────────────────────────

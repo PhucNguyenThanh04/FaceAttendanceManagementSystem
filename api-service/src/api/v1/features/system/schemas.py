@@ -6,10 +6,12 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from src.api.v1.shared.datetime_utils import AppTimezoneModel
+
 SETTING_KEY_PATTERN = r"^[a-z][a-z0-9_.-]{1,120}$"
 
 
-class SystemSettingBase(BaseModel):
+class SystemSettingBase(AppTimezoneModel):
     key: str = Field(
         ...,
         min_length=2,

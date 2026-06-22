@@ -12,7 +12,7 @@ engine = create_async_engine(
     max_overflow=10,
     echo=False,
     connect_args={
-        "server_settings": {"timezone": settings.database_timezone}
+        "server_settings": {"TimeZone": settings.database_timezone}
     },
 )
 

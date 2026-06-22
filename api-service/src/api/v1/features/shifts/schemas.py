@@ -5,8 +5,10 @@ from datetime import date, datetime, time
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.api.v1.shared.datetime_utils import AppTimezoneModel
 
-class WorkShiftBase(BaseModel):
+
+class WorkShiftBase(AppTimezoneModel):
     name: str = Field(..., min_length=1, max_length=100)
     code: str | None = Field(default=None, min_length=1, max_length=30)
     start_time: time
@@ -56,7 +58,7 @@ class WorkShiftRead(WorkShiftBase):
     updated_at: datetime
 
 
-class EmployeeShiftAssignmentBase(BaseModel):
+class EmployeeShiftAssignmentBase(AppTimezoneModel):
     employee_id: uuid.UUID
     shift_id: int = Field(..., ge=1)
     effective_date: date
@@ -120,7 +122,7 @@ class CurrentShiftRead(BaseModel):
     shift: WorkShiftRead
 
 
-class HolidayBase(BaseModel):
+class HolidayBase(AppTimezoneModel):
     name: str = Field(..., min_length=1, max_length=100)
     holiday_date: date
     description: str | None = Field(default=None, max_length=500)

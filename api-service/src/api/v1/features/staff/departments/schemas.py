@@ -5,8 +5,10 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from src.api.v1.shared.datetime_utils import AppTimezoneModel
 
-class DepartmentBase(BaseModel):
+
+class DepartmentBase(AppTimezoneModel):
     name: str = Field(..., min_length=1, max_length=100)
     code: str | None = Field(default=None, min_length=1, max_length=30)
     description: str | None = Field(default=None, max_length=500)

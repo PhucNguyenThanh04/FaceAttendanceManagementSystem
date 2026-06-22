@@ -6,10 +6,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.api.v1.shared.datetime_utils import AppTimezoneModel
 from src.api.v1.shared.enums import AuditAction
 
 
-class AuditLogBase(BaseModel):
+class AuditLogBase(AppTimezoneModel):
     performed_by: uuid.UUID | None = None
     action: AuditAction
     object_type: str = Field(..., min_length=1, max_length=100)

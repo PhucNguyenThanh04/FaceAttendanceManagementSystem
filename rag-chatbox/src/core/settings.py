@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     qdrant_timeout: float = 5.0
     qdrant_upsert_batch_size: int
 
+    redis_host: str
+    redis_port: int
+    redis_password: str = ""
+    redis_url: str
+
     dense_vector_name: str
     sparse_vector_name: str
     bge_m3_dense_size: int

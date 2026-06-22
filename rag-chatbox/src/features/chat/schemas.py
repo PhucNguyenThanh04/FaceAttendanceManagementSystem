@@ -1,9 +1,19 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
+class ChatHistoryTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(..., min_length=1)
+
+
 class ChatRequest(BaseModel):
-    question: str = Field(..., min_length=1)
-    user_role: str = Field(..., min_length=1)
+    message: str = Field(..., min_length=1)
+    user_id: str
+    role: str = Field(..., min_length=1)
+    conversation_id: str = Field(..., min_length=1)
+    chat_history: list[ChatHistoryTurn] = Field(default_factory=list)
 
 
 class ChatCitation(BaseModel):
@@ -20,6 +30,6 @@ class ChatCitation(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
-    citations: list[ChatCitation] = []
+    citations: list[ChatCitation] = Field(default_factory=list)
     low_confidence: bool = False
     used_context: bool = False

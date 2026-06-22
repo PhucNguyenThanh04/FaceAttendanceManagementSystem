@@ -1,9 +1,10 @@
-from fastapi import Request, HTTPException, Security
+from fastapi import Depends, Request, HTTPException, Security
 from fastapi.security import APIKeyHeader
 from src.rag.ingestion.pipeline import IngestionPipeline
 from src.rag.embeddings.embedding_service import EmbeddingService
 from src.integrations.qdrant.store import QdrantVectorStore
 from src.rag.retrieval.reranker import RerankerService
+from redis.asyncio import Redis
 
 from src.core.settings import get_settings
 
@@ -31,3 +32,13 @@ def get_reranker_service(request: Request) -> RerankerService:
 
 def get_ingestion_pipeline(request: Request) -> IngestionPipeline:
     return request.app.state.ingestion_pipeline
+
+
+
+def get_redis_client(request: Request) -> Redis:
+    redis_client = getattr(request.app.state, "redis", None)
+
+    if redis_client is None:
+        raise RuntimeError("Redis client chưa được khởi tạo trong app.state")
+
+    return redis_client

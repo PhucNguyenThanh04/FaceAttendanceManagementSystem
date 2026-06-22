@@ -3,6 +3,7 @@ import uuid
 
 from pydantic import BaseModel, Field, field_validator, model_validator, EmailStr
 
+from src.api.v1.shared.datetime_utils import AppTimezoneModel
 from src.api.v1.shared.enums import RoleName, UserStatus
 
 EMAIL_PATTERN = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
@@ -19,7 +20,7 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str = Field(..., min_length=20, max_length=512)
 
 
-class TokenPairResponse(BaseModel):
+class TokenPairResponse(AppTimezoneModel):
     access_token: str
     access_token_expires_at: datetime
     refresh_token: str
@@ -27,7 +28,7 @@ class TokenPairResponse(BaseModel):
     token_type: str = "bearer"
 
 
-class AuthUserProfileResponse(BaseModel):
+class AuthUserProfileResponse(AppTimezoneModel):
     user_id: uuid.UUID
     email: str
     role_name: RoleName

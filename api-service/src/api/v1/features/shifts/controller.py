@@ -12,12 +12,12 @@ from src.api.v1.features.shifts.service import (
 )
 from src.api.v1.features.users.models import User
 from src.api.v1.shared.enums import RoleName
-from src.core.dependencies.auth import require_roles
+from src.core.dependencies.auth import require_roles, get_current_user_or_rag_api_key
 
 router = APIRouter(prefix="/work-shifts", tags=["Work-Shifts"])
 
 
-@router.post("", response_model=schemas.WorkShiftRead, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=schemas.WorkShiftRead, status_code=status.HTTP_201_CREATED)
 async def create_work_shift(
     payload: schemas.WorkShiftCreate,
     service: WorkShiftService = Depends(get_work_shift_service),
@@ -26,7 +26,7 @@ async def create_work_shift(
     return await service.create_work_shift(payload)
 
 
-@router.get("", response_model=list[schemas.WorkShiftRead])
+@router.get("/", response_model=list[schemas.WorkShiftRead])
 async def list_work_shifts(
     search: str | None = None,
     is_active: bool | None = None,
@@ -130,7 +130,7 @@ async def get_employee_current_shift(
     employee_id: uuid.UUID,
     as_of: date | None = None,
     service: WorkShiftService = Depends(get_work_shift_service),
-    _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
+    _: User = Depends(get_current_user_or_rag_api_key),
 ) -> schemas.CurrentShiftRead:
     return await service.get_current_shift(employee_id=employee_id, as_of=as_of)
 

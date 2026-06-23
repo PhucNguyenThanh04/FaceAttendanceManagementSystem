@@ -2,6 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from qdrant_client import AsyncQdrantClient
@@ -64,7 +65,12 @@ async def lifespan(app: FastAPI):
     logger.info("Vectordb ready (collection=%s)", settings.qdrant_collection_name)
 
     register_service = RegisterService(pipeline=pipeline, vectordb=vectordb)
-    api_server_client = ApiServerClient()
+    api_server_http_client = httpx.AsyncClient(
+        base_url=settings.api_server_base_url.rstrip("/"),
+        timeout=httpx.Timeout(5.0, connect=3.0),
+        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+    )
+    api_server_client = ApiServerClient(api_server_http_client)
     attendance_pipeline = AttendancePipeline(
         pipline=pipeline,
         vectordb=vectordb,
@@ -78,6 +84,7 @@ async def lifespan(app: FastAPI):
     app.state.qdrant = qdrant   # health check cần dùng trực tiếp
     app.state.register_service = register_service
     app.state.attendance_worker = attendance_pipeline
+    app.state.api_server_http = api_server_http_client
     app.state.api_server_client = api_server_client
 
     if settings.attendance_enabled:
@@ -94,8 +101,8 @@ async def lifespan(app: FastAPI):
 
     # 1. Dừng worker trước — tránh worker gọi pipeline trong khi executor đóng
     await attendance_pipeline.stop()
-    await api_server_client.close()
-    logger.info("api-service client closed")
+    await api_server_http_client.aclose()
+    logger.info("api-service HTTP client closed")
 
     # 2. Chờ các ML thread đang chạy hoàn thành — tránh kill giữa chừng
     executor.shutdown(wait=True)

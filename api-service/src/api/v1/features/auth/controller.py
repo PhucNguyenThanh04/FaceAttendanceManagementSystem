@@ -4,7 +4,10 @@ from fastapi.security import HTTPAuthorizationCredentials
 from src.api.v1.features.auth import schemas as auth_schemas
 from src.api.v1.features.auth.service import AuthService, get_auth_service
 from src.api.v1.features.users.models import User
-from src.core.dependencies.auth import bearer_scheme, get_current_user
+from src.core.dependencies.auth import (
+    bearer_scheme,
+    get_current_user, 
+)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 

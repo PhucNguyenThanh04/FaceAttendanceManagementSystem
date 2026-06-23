@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 
 from src.api.v1.features.attendance import schemas
 from src.api.v1.features.attendance.service import (
@@ -12,8 +11,12 @@ from src.api.v1.features.attendance.service import (
     get_attendance_service,
 )
 from src.api.v1.features.users.models import User
-from src.api.v1.shared.enums import AttendanceEventType, RoleName
-from src.core.dependencies.auth import require_roles, verify_api_key_attendance
+from src.api.v1.shared.enums import RoleName
+from src.core.dependencies.auth import (
+require_roles, 
+verify_api_key_attendance, 
+get_current_user_or_rag_api_key
+)
 
 router = APIRouter(prefix="/attendance", tags=["Attendance"])
 
@@ -32,25 +35,10 @@ async def create_attendance_event(
 
 @router.get("/events", response_model=list[schemas.AttendanceEventRead])
 async def list_attendance_events(
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=200),
-    employee_id: uuid.UUID | None = None,
-    event_type: AttendanceEventType | None = None,
-    accepted: bool | None = None,
-    event_time_from: datetime | None = None,
-    event_time_to: datetime | None = None,
+    query: schemas.AttendanceEventListQuery ,
     service: AttendanceService = Depends(get_attendance_read_service),
-    _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
+    _: User = Depends(get_current_user_or_rag_api_key),
 ) -> list[schemas.AttendanceEventRead]:
-    query = schemas.AttendanceEventListQuery(
-        page=page,
-        page_size=page_size,
-        employee_id=employee_id,
-        event_type=event_type,
-        accepted=accepted,
-        event_time_from=event_time_from,
-        event_time_to=event_time_to,
-    )
     return await service.list_events(query)
 
 

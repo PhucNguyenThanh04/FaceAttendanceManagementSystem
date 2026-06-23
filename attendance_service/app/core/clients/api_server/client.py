@@ -19,23 +19,10 @@ logger = setup_logger(__name__)
 class ApiServerClient:
     """Small HTTP client used by attendance_service to call api-service."""
 
-    def __init__(
-        self,
-        http_client: httpx.AsyncClient | None = None,
-        base_url: str | None = None,
-        api_key: str | None = None,
-    ) -> None:
-        self._owns_client = http_client is None
-        self._http = http_client or httpx.AsyncClient(
-            base_url=(base_url or settings.api_server_base_url).rstrip("/"),
-            timeout=5.0,
-        )
-        self._api_key = api_key or settings.api_key
+    def __init__(self, http_client: httpx.AsyncClient) -> None:
+        self._http = http_client
+        self._api_key = settings.api_key
         self._default_headers = {"Attendance-API-Key": self._api_key} if self._api_key else {}
-
-    async def close(self) -> None:
-        if self._owns_client:
-            await self._http.aclose()
 
     async def health(self) -> APIHealthResponse:
         data = await self._request_json("GET", APIServerPaths.HEALTH, require_api_key=False)

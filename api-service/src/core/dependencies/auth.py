@@ -1,6 +1,5 @@
 
 import secrets
-import uuid
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, Security, status
@@ -8,14 +7,13 @@ from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBea
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from src.core.configs.settings import settings
 from src.core.db.database import get_db
 from src.core.security.authentication import build_access_token_blacklist_key
 from src.api.v1.features.users.models import User
 from src.api.v1.features.staff.models import Employee
-from src.api.v1.shared.enums import EmployeeStatus, RoleName, UserStatus
+from src.api.v1.shared.enums import RoleName, UserStatus
 from src.core.exceptions import ForbiddenException, NotFoundException, UnauthorizedException
 
 

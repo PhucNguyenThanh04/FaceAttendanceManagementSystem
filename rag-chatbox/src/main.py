@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 from redis.exceptions import AuthenticationError
 
@@ -18,6 +19,7 @@ from src.rag.ingestion.loaders.factory_loader import LoaderFactory
 from src.rag.ingestion.pipeline import IngestionPipeline
 from src.rag.retrieval.reranker import RerankerClient, RerankerService
 from src.integrations.cache.redis_client import create_redis_async_client
+from src.integrations.api_service.clients import APIServiceClient
 from src.api.v1.routers import router as v1_router
 
 
@@ -32,6 +34,9 @@ logger = setup_logger(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up RAG service...")
+    redis_client = None
+    qdrant_manager = None
+    api_service_http_client = None
 
     try:
         redis_client = create_redis_async_client()
@@ -79,6 +84,14 @@ async def lifespan(app: FastAPI):
             indexer=DocumentIndexer(embedding_service, vector_store),
             qdrant_manager=qdrant_manager,
         )
+
+        # --- API service client ---
+        api_service_http_client = httpx.AsyncClient(
+            base_url=settings.api_server_base_url.rstrip("/"),
+            timeout=httpx.Timeout(10.0, connect=3.0),
+            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+        )
+        api_service_client = APIServiceClient(api_service_http_client)
         
         # Lưu services lên app.state để routes/DI dùng:
         app.state.embedding_service = embedding_service
@@ -87,6 +100,8 @@ async def lifespan(app: FastAPI):
         app.state.ingestion_pipeline = ingestion_pipeline
         app.state.qdrant_manager = qdrant_manager
         app.state.redis = redis_client
+        app.state.api_service_http = api_service_http_client
+        app.state.api_service_client = api_service_client
 
 
         logger.info("RAG service ready")
@@ -97,6 +112,9 @@ async def lifespan(app: FastAPI):
         logger.exception("Lỗi khởi tạo tài nguyên trong lifespan")
         raise
     finally:
+        if api_service_http_client is not None:
+            await api_service_http_client.aclose()
+            logger.info("api-service HTTP client đã đóng")
         if qdrant_manager is not None:
             await qdrant_manager.close()
             logger.info("Qdrant client đã đóng")

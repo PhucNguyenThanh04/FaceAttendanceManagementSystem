@@ -1,4 +1,4 @@
-from fastapi import Depends, Request, HTTPException, Security
+from fastapi import Request, HTTPException, Security
 from fastapi.security import APIKeyHeader
 from src.rag.ingestion.pipeline import IngestionPipeline
 from src.rag.embeddings.embedding_service import EmbeddingService
@@ -7,6 +7,7 @@ from src.rag.retrieval.reranker import RerankerService
 from redis.asyncio import Redis
 
 from src.core.settings import get_settings
+from src.integrations.api_service.clients import APIServiceClient
 
 settings = get_settings()
 
@@ -42,3 +43,10 @@ def get_redis_client(request: Request) -> Redis:
         raise RuntimeError("Redis client chưa được khởi tạo trong app.state")
 
     return redis_client
+
+
+def get_api_service_client(request: Request) -> APIServiceClient:
+    api_service_client = getattr(request.app.state, "api_service_client", None)
+    if api_service_client is None:
+        raise RuntimeError("API service client chưa được khởi tạo trong app.state")
+    return api_service_client

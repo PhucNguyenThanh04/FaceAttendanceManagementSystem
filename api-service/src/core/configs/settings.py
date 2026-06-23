@@ -1,3 +1,4 @@
+import http
 from pathlib import Path
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,6 +13,11 @@ class Setting(BaseSettings):
     debug: bool = True
     app_host: str = "0.0.0.0"
     app_port: int = 8000
+
+    # Rag service 
+
+    rag_api_url: str
+    rag_api_key: str
 
     # AI service
     ai_service_base_url: str

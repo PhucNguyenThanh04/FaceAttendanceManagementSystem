@@ -2,7 +2,7 @@ from pathlib import Path
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# root ai-service
+# root attendance_service
 BASE_DIR = Path(__file__).resolve().parents[3]
 
 

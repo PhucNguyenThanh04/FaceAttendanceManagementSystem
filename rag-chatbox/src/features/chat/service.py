@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from fastapi import Depends
 
-from src.core.dependenci import (
-    get_retrieval_pipeline,
-)
+from src.rag.retrieval.retrieval_pipeline import get_retrieval_pipeline
 from src.features.chat.schemas import (
     ChatCitation,
     ChatRequest,

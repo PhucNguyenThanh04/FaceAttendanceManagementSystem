@@ -13,12 +13,16 @@ from src.api.v1.features.attendance.service import (
 )
 from src.api.v1.features.users.models import User
 from src.api.v1.shared.enums import AttendanceEventType, RoleName
-from src.core.dependencies.auth import require_roles
+from src.core.dependencies.auth import require_roles, verify_api_key_attendance
 
 router = APIRouter(prefix="/attendance", tags=["Attendance"])
 
 
-@router.post("/events", response_model=schemas.AttendanceEventAcceptedResponse)
+@router.post(
+    "/events",
+    response_model=schemas.AttendanceEventAcceptedResponse,
+    dependencies=[Depends(verify_api_key_attendance)],
+)
 async def create_attendance_event(
     payload: schemas.AttendanceAIEventCreate,
     service: AttendanceService = Depends(get_attendance_service),

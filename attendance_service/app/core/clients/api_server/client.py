@@ -17,7 +17,7 @@ logger = setup_logger(__name__)
 
 
 class ApiServerClient:
-    """Small HTTP client used by ai-service to call api-service."""
+    """Small HTTP client used by attendance_service to call api-service."""
 
     def __init__(
         self,
@@ -30,8 +30,8 @@ class ApiServerClient:
             base_url=(base_url or settings.api_server_base_url).rstrip("/"),
             timeout=5.0,
         )
-        self._api_key = api_key
-        self._default_headers = {"X-API-Key": api_key} if api_key else {}
+        self._api_key = api_key or settings.api_key
+        self._default_headers = {"Attendance-API-Key": self._api_key} if self._api_key else {}
 
     async def close(self) -> None:
         if self._owns_client:
@@ -49,7 +49,7 @@ class ApiServerClient:
             "POST",
             APIServerPaths.ATTENDANCE_EVENTS,
             json=payload.model_dump(mode="json", exclude_none=True),
-            require_api_key=False,
+            require_api_key=True,
         )
         return APIAttendanceEventResponse.model_validate(data)
 

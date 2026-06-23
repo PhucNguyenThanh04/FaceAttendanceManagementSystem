@@ -8,7 +8,7 @@ from src.api.v1.features.staff.employees import schemas
 from src.api.v1.features.staff.employees.service import EmployeeService, get_employee_service
 from src.api.v1.features.users.models import User
 from src.api.v1.shared.enums import RoleName
-from src.core.dependencies.auth import require_roles
+from src.core.dependencies.auth import require_roles, get_current_user_or_rag_api_key
 
 router = APIRouter(prefix="/employees", tags=["Staff-Employees"])
 
@@ -23,10 +23,10 @@ async def get_employee_by_code(
 
 
 @router.get("/{employee_id}", response_model=schemas.EmployeeRead)
-async def get_employee(
+async def get_employee( 
     employee_id: uuid.UUID,
     service: EmployeeService = Depends(get_employee_service),
-    _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
+    _: User = Depends(get_current_user_or_rag_api_key),
 ) -> schemas.EmployeeRead:
     return await service.get_employee(employee_id)
 

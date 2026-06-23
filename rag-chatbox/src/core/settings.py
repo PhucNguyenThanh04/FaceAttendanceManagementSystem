@@ -49,8 +49,8 @@ class Settings(BaseSettings):
     web_search_max_results: int = 5
 
     # Backward-compatible optional fields for future internal-service wiring.
-    api_server_base_url: str = ""
-    api_key: str = ""
+    api_server_base_url: str
+    rag_api_key: str
     agent_server_name: str = "rag-chatbox"
 
     @property

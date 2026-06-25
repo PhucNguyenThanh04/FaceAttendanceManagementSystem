@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from fastapi import Depends
 
 from src.core.settings import get_settings
-from src.integrations.llm.prompts import RetrievedChunk
+from src.rag.retrieval.schemas import RetrievedChunk
 from src.integrations.qdrant.store import QdrantSearchResult
 from src.rag.retrieval.context_builder import ContextBuilder, ContextCitation
 from src.rag.retrieval.hybrid_retriever import HybridRetriever

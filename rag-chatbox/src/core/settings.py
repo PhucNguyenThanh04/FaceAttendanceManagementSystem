@@ -22,8 +22,7 @@ class Settings(BaseSettings):
 
     redis_host: str
     redis_port: int
-    redis_password: str = ""
-    redis_url: str
+    redis_url: str = ""
 
     dense_vector_name: str
     sparse_vector_name: str
@@ -44,38 +43,16 @@ class Settings(BaseSettings):
     api_port: int
     api_debug: bool
 
-    # Optional web search
-    tavily_api_key: str | None = None
-    web_search_max_results: int = 5
-
-    # Backward-compatible optional fields for future internal-service wiring.
     api_server_base_url: str
     rag_api_key: str
-    agent_server_name: str = "rag-chatbox"
-
-    @property
-    def host_qdrant(self) -> str:
-        return self.qdrant_host
-
-    @property
-    def port_qdrant(self) -> int:
-        return self.qdrant_port
 
     @property
     def qdrant_url(self) -> str:
         return f"http://{self.qdrant_host}:{self.qdrant_port}"
 
     @property
-    def url_qdrant(self) -> str:
-        return self.qdrant_url
-
-    @property
     def default_qdrant_collection(self) -> str:
         return self.qdrant_collection_policy
-
-    @property
-    def qdrant_collection_name(self) -> str:
-        return self.default_qdrant_collection
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

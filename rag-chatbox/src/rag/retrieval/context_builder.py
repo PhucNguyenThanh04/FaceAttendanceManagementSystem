@@ -9,7 +9,7 @@ try:
 except ImportError:
     tiktoken = None
 
-from src.integrations.llm.prompts import RetrievedChunk
+from src.rag.retrieval.schemas import RetrievedChunk
 from src.integrations.qdrant.store import QdrantSearchResult
 
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from typing import Any
-from uuid import UUID
 
 import httpx
 from pydantic import ValidationError
@@ -25,7 +24,7 @@ class DatabaseQueryTool(BaseTool):
         "Tool này chỉ đọc dữ liệu của nhân viên hiện tại, không tạo/sửa/xóa dữ liệu."
     )
 
-    def __init__(self, api_service_client: APIServiceClient, employee_id: UUID) -> None:
+    def __init__(self, api_service_client: APIServiceClient, employee_id: str) -> None:
         self.api_service_client = api_service_client
         self.employee_id = employee_id
 

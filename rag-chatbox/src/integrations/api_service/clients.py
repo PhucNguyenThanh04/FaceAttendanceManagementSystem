@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Any
-import uuid
 
 import httpx
 
@@ -27,7 +26,7 @@ class APIServiceClient:
         self._api_key = settings.rag_api_key
         self._default_headers = {"Rag-API-Key": self._api_key} if self._api_key else {}
 
-    async def get_employee(self, employee_id: uuid.UUID) -> EmployeeRead:
+    async def get_employee(self, employee_id: str) -> EmployeeRead:
         data = await self._request_json(
             method="GET",
             path=APIServerPaths.EMPLOYEE_BY_ID.format(employee_id=employee_id),
@@ -36,7 +35,7 @@ class APIServiceClient:
 
     async def get_employee_current_shift(
         self,
-        employee_id: uuid.UUID,
+        employee_id: str,
         as_of: date | None = None,
     ) -> CurrentShiftRead:
         params = {"as_of": as_of.isoformat()} if as_of is not None else None

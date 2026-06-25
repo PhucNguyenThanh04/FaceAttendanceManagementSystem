@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 from qdrant_client import AsyncQdrantClient, models
 
 from src.core.settings import get_settings
@@ -58,18 +56,6 @@ class QdrantClientManager:
                 self.sparse_vector_name: models.SparseVectorParams(),
             },
         )
-
-    async def ensure_default_collections(self) -> None:
-        await self.ensure_collections(
-            [
-                settings.qdrant_collection_policy,
-                settings.qdrant_collection_law,
-            ]
-        )
-
-    async def ensure_collections(self, collection_names: Sequence[str]) -> None:
-        for collection_name in collection_names:
-            await self.ensure_collection(collection_name)
 
     async def _collection_exists(self, collection_name: str) -> bool:
         if hasattr(self._client, "collection_exists"):

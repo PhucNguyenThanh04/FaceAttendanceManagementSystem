@@ -4,7 +4,7 @@ from src.rag.retrieval.retrieval_pipeline import (
     RetrievalPipeline,
     RetrievalPipelineResult,
 )
-from src.tools.base_tool import BaseTool
+from src.tools.base_tool import BaseTool, ToolCitation, ToolResult
 
 
 class VectorSearchTool(BaseTool):
@@ -22,10 +22,12 @@ class VectorSearchTool(BaseTool):
         self.retrieval_pipeline = retrieval_pipeline
         self.allowed_role = allowed_role
 
-    async def run(self, query: str) -> str:
+    async def run(self, query: str) -> ToolResult:
         query = query.strip()
         if not query:
-            return "Không có truy vấn để tìm kiếm trong tài liệu nội bộ."
+            return ToolResult(
+                observation="Không có truy vấn để tìm kiếm trong tài liệu nội bộ."
+            )
 
         result = await self.retrieval_pipeline.retrieve_context(
             query=query,
@@ -33,9 +35,32 @@ class VectorSearchTool(BaseTool):
         )
 
         if not result.used_context or not result.chunks:
-            return "Không tìm thấy thông tin phù hợp trong tài liệu nội bộ."
+            return ToolResult(
+                observation="Không tìm thấy thông tin phù hợp trong tài liệu nội bộ.",
+                used_context=False,
+                low_confidence=result.low_confidence,
+            )
 
-        return self._format_result(result)
+        return ToolResult(
+            observation=self._format_result(result),
+            citations=[
+                ToolCitation(
+                    index=citation.index,
+                    chunk_id=citation.chunk_id,
+                    document_id=citation.document_id,
+                    filename=citation.filename,
+                    page=citation.page,
+                    section=citation.section,
+                    clause_number=citation.clause_number,
+                    score=citation.score,
+                    file_path=citation.file_path,
+                )
+                for citation in result.citations
+            ],
+            used_context=True,
+            low_confidence=result.low_confidence,
+            metadata={"tool": self.name},
+        )
 
     def _format_result(self, result: RetrievalPipelineResult) -> str:
         citation_by_index = {

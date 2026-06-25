@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI):
         limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
     )
     api_server_client = ApiServerClient(api_server_http_client)
-    attendance_pipeline = AttendancePipeline(
+    attendance_worker = AttendancePipeline(
         pipline=pipeline,
         vectordb=vectordb,
         camera_url=settings.stream_url,
@@ -83,12 +83,12 @@ async def lifespan(app: FastAPI):
     # 4. Services — pipeline truyền vào service, không expose ra app.state
     app.state.qdrant = qdrant   # health check cần dùng trực tiếp
     app.state.register_service = register_service
-    app.state.attendance_worker = attendance_pipeline
+    app.state.attendance_worker = attendance_worker
     app.state.api_server_http = api_server_http_client
     app.state.api_server_client = api_server_client
 
     if settings.attendance_enabled:
-        attendance_pipeline.start()
+        attendance_worker.start()
     else:
         logger.info("Attendance worker disabled")
 
@@ -100,7 +100,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down AI server...")
 
     # 1. Dừng worker trước — tránh worker gọi pipeline trong khi executor đóng
-    await attendance_pipeline.stop()
+    await attendance_worker.stop()
     await api_server_http_client.aclose()
     logger.info("api-service HTTP client closed")
 

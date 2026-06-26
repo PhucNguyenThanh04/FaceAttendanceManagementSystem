@@ -65,8 +65,8 @@ class PromptBuilder:
         Gọi 1 lần khi tạo Supervisor, không đổi trong suốt ReAct loop.
         """
         return REACT_SYSTEM_PROMPT.format(
-            tool_descriptions=tool_descriptions,
             current_date=current_date,
+            tool_descriptions=tool_descriptions,
         )
 
     @staticmethod
@@ -91,7 +91,7 @@ class PromptBuilder:
         # Phần 1: Lịch sử hội thoại
         if chat_history:
             parts.append("=== LỊCH SỬ HỘI THOẠI ===")
-            for turn in chat_history[-6:]:  # Chỉ lấy 6 lượt gần nhất
+            for turn in chat_history[-3:]:  # Chỉ lấy 3 lượt gần nhất
                 role_label = "Người dùng" if turn.role == "user" else "Trợ lý"
                 parts.append(f"{role_label}: {turn.content}")
             parts.append("")

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from src.tools.base_tool import BaseTool
 
 
@@ -13,7 +15,9 @@ class ToolRegistry:
     Usage:
         registry = ToolRegistry()
         registry.register(VectorSearchTool(...))
-        registry.register(DatabaseQueryTool(...))
+        registry.register(EmployeeQueryTool(...))
+        registry.register(ShiftQueryTool(...))
+        registry.register(AttendanceQueryTool(...))
         registry.register(AskUserTool())
 
         tool = registry.get("vector_search")
@@ -53,15 +57,23 @@ class ToolRegistry:
             Các tool bạn có thể sử dụng:
 
             1. vector_search: Tìm kiếm thông tin trong tài liệu...
-            2. database_query: Tra cứu dữ liệu vận hành...
-            3. ask_user: Hỏi lại người dùng...
+            2. employee_query: Tra cứu hồ sơ nhân viên hiện tại...
+               input_schema: {...}
+            3. shift_query: Tra cứu ca làm...
         """
         if not self._tools:
             return "Không có tool nào khả dụng."
 
         lines = ["Các tool bạn có thể sử dụng:", ""]
         for index, tool in enumerate(self._tools.values(), start=1):
-            lines.append(f"{index}. {tool.name}: {tool.description}")
+            tool_info = tool.to_dict()
+            lines.append(f"{index}. {tool_info['name']}: {tool_info['description']}")
+            input_schema = tool_info.get("input_schema")
+            if input_schema is not None:
+                lines.append(
+                    "   input_schema: "
+                    f"{json.dumps(input_schema, ensure_ascii=False)}"
+                )
 
         return "\n".join(lines)
 

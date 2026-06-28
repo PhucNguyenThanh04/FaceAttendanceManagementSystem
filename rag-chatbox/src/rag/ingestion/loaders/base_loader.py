@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-import json
 from typing import Any, TYPE_CHECKING
 import unicodedata
 
@@ -75,40 +74,9 @@ class BaseLoader(ABC):
     def _normalize_roles(self, roles: Any) -> list[str]:
         if roles is None:
             return []
-
-        if isinstance(roles, str):
-            raw_roles = roles.strip()
-            if not raw_roles:
-                return []
-
-            try:
-                decoded = json.loads(raw_roles)
-            except json.JSONDecodeError:
-                decoded = raw_roles
-
-            roles = decoded
-
-        if not isinstance(roles, (list, tuple, set)):
-            roles = [roles]
-
-        normalized_roles: list[str] = []
-        for role in roles:
-            role_value = role.value if hasattr(role, "value") else role
-            if role_value is None:
-                continue
-
-            if isinstance(role_value, str):
-                role_parts = role_value.split(",")
-            else:
-                role_parts = [str(role_value)]
-
-            normalized_roles.extend(
-                role_part.strip()
-                for role_part in role_parts
-                if role_part.strip()
-            )
-
-        return normalized_roles
+        if isinstance(roles, (list, tuple, set)):
+            return [str(role) for role in roles if role is not None]
+        return [str(roles)]
 
     def _normalize_extra_metadata(
         self,

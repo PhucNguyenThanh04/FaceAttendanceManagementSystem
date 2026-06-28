@@ -5,6 +5,19 @@ from typing import Any, Mapping
 
 
 @dataclass
+class ToolCitation:
+    index: int
+    chunk_id: str
+    filename: str
+    score: float
+    document_id: str | None = None
+    page: int | None = None
+    section: str | None = None
+    clause_number: str | None = None
+    file_path: str | None = None
+
+
+@dataclass
 class RetrievedChunk:
     """
     Chunk đã được retrieve và rerank, dùng để build context.

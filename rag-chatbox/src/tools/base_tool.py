@@ -4,18 +4,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import BaseModel
 
-@dataclass
-class ToolCitation:
-    index: int
-    chunk_id: str
-    filename: str
-    score: float
-    document_id: str | None = None
-    page: int | None = None
-    section: str | None = None
-    clause_number: str | None = None
-    file_path: str | None = None
+from src.rag.retrieval.schemas import ToolCitation
 
 
 @dataclass
@@ -30,6 +21,7 @@ class ToolResult:
 class BaseTool(ABC):
     name: str
     description: str  # LLM đọc cái này để biết chọn tool nào
+    args_schema: type[BaseModel] | None = None
 
     @abstractmethod
     async def run(self, **kwargs) -> str | ToolResult:
@@ -40,7 +32,10 @@ class BaseTool(ABC):
 
     def to_dict(self) -> dict:
         """Mô tả tool cho LLM đọc trong prompt."""
-        return {
+        tool = {
             "name": self.name,
             "description": self.description,
         }
+        if self.args_schema is not None:
+            tool["input_schema"] = self.args_schema.model_json_schema()
+        return tool

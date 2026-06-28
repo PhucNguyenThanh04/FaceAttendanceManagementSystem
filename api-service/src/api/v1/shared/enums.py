@@ -122,3 +122,16 @@ class AuditAction(str, enum.Enum):
     logout = "logout"
     revoke = "revoke"
     manual_edit = "manual_edit"
+
+
+# ── Knowledge Base / Chat ─────────────────────────────────────────────────
+
+class DocumentStatus(str, enum.Enum):
+    processing = "processing"
+    ready = "ready"
+    failed = "failed"
+
+
+class ChatMessageRole(str, enum.Enum):
+    user = "user"
+    assistant = "assistant"

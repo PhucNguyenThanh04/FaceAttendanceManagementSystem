@@ -1,5 +1,6 @@
 from pathlib import Path
 from functools import lru_cache
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -12,6 +13,25 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.1
     llm_max_output_tokens: int = 2048
     llm_timeout: float = 30.0
+
+    # Agent working memory
+    agent_max_steps: int = 5
+    agent_prompt_window_steps: int = 3
+    agent_action_input_limit_chars: int = 1000
+    agent_default_observation_limit_chars: int = 2500
+    agent_error_observation_limit_chars: int = 500
+    # Số message gần nhất đưa vào prompt, không phải số cặp user-assistant.
+    # 6 messages tương đương khoảng 3 lượt user-assistant.
+    chat_history_window_messages: int = 6
+    agent_tool_observation_limits: dict[str, int] = Field(
+        default_factory=lambda: {
+            "vector_search": 3000,
+            "attendance_query": 1500,
+            "employee_query": 1000,
+            "shift_query": 1000,
+            "ask_user": 500,
+        }
+    )
 
     # Qdrant
     qdrant_host: str = "localhost"

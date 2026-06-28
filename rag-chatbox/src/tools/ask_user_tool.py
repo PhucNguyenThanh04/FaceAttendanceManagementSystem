@@ -1,8 +1,29 @@
 from __future__ import annotations
 import json
+
+from pydantic import BaseModel, ConfigDict, Field
+
 from src.tools.base_tool import BaseTool
 
 ASK_USER_PREFIX = "__ASK_USER__"
+
+
+class AskUserInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(
+        default="",
+        description="Câu hỏi cần hỏi lại người dùng.",
+    )
+    options: list[str] | None = Field(
+        default=None,
+        description="Danh sách lựa chọn gợi ý cho người dùng, nếu có.",
+    )
+    allow_free_text: bool = Field(
+        default=True,
+        description="Cho phép người dùng nhập câu trả lời tự do ngoài options.",
+    )
+
 
 class AskUserTool(BaseTool):
     name = "ask_user"
@@ -12,6 +33,7 @@ class AskUserTool(BaseTool):
         "Có thể cung cấp options gợi ý cho user chọn. "
         "Không dùng khi đã đủ thông tin để tra cứu."
     )
+    args_schema = AskUserInput
 
     async def run(
         self,

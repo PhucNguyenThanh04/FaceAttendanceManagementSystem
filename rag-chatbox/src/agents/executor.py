@@ -4,11 +4,18 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import ValidationError
+
 from src.tools.ask_user_tool import AskUserTool
 from src.tools.base_tool import ToolCitation, ToolResult
 from src.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
+
+TOOL_RUNTIME_ERROR_OBSERVATION = (
+    "[Tool error: tool '{action}' failed with runtime error. "
+    "Do not repeat the same action without changing input.]"
+)
 
 
 @dataclass
@@ -55,11 +62,19 @@ class Executor:
             )
 
         try:
-            raw_result = await tool.run(**action_input)
+            validated_input = self._validate_action_input(tool, action_input)
+        except ValidationError as exc:
+            return ExecutionResult(
+                observation=f"Tham số tool '{action}' không hợp lệ: {exc}",
+                is_error=True,
+            )
+
+        try:
+            raw_result = await tool.run(**validated_input)
         except Exception as exc:
             logger.error("Tool '%s' error: %s", action, exc, exc_info=True)
             return ExecutionResult(
-                observation=f"Tool '{action}' gặp lỗi: {exc}",
+                observation=TOOL_RUNTIME_ERROR_OBSERVATION.format(action=action),
                 is_error=True,
             )
 
@@ -100,3 +115,11 @@ class Executor:
         if isinstance(result, ToolResult):
             return result
         return ToolResult(observation=str(result or ""))
+
+    @staticmethod
+    def _validate_action_input(tool: Any, action_input: dict[str, Any]) -> dict[str, Any]:
+        if tool.args_schema is None:
+            return action_input
+
+        args = tool.args_schema.model_validate(action_input or {})
+        return args.model_dump(exclude_none=True)

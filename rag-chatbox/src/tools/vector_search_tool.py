@@ -1,10 +1,22 @@
 from __future__ import annotations
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from src.rag.retrieval.retrieval_pipeline import (
     RetrievalPipeline,
     RetrievalPipelineResult,
 )
 from src.tools.base_tool import BaseTool, ToolCitation, ToolResult
+
+
+class VectorSearchInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(
+        ...,
+        min_length=1,
+        description="Câu hỏi hoặc từ khóa cần tìm trong tài liệu nội bộ.",
+    )
 
 
 class VectorSearchTool(BaseTool):
@@ -13,6 +25,7 @@ class VectorSearchTool(BaseTool):
         "Tìm kiếm thông tin trong tài liệu nội bộ bằng vector/RAG search. "
         "Dùng khi cần tra cứu chính sách, nội quy, quy trình hoặc tài liệu đã index."
     )
+    args_schema = VectorSearchInput
 
     def __init__(
         self,

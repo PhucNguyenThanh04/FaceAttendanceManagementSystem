@@ -13,11 +13,11 @@ import type {
 
 export const shiftApi = {
   listWorkShifts: async (params: WorkShiftListParams = {}): Promise<WorkShift[]> => {
-    const response = await api.get<WorkShift[]>('/work-shifts', { params })
+    const response = await api.get<WorkShift[]>('/work-shifts/', { params })
     return response.data
   },
   createWorkShift: async (payload: CreateWorkShiftPayload): Promise<WorkShift> => {
-    const response = await api.post<WorkShift>('/work-shifts', payload)
+    const response = await api.post<WorkShift>('/work-shifts/', payload)
     return response.data
   },
   updateWorkShift: async ({

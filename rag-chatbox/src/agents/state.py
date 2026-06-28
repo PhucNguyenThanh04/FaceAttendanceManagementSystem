@@ -8,9 +8,10 @@ from src.tools.base_tool import ToolCitation
 @dataclass
 class AgentStep:
     thought: str
-    action: str                     # tên tool: "vector_search", "database_query", "ask_user"
+    action: str                     # tên tool: "vector_search", "employee_query", "ask_user", ...
     action_input: dict[str, Any]    # params truyền vào tool.run(**action_input)
     observation: str                # kết quả tool trả về — Supervisor append vào prompt loop kế tiếp
+    is_error: bool = False
     citations: list[ToolCitation] = field(default_factory=list)
     used_context: bool = False
     low_confidence: bool = False
@@ -24,7 +25,6 @@ class AgentState:
     user_message: str
     employee_id: str
     user_role: str
-    conversation_id: str = ""
     chat_history: list[ChatHistoryTurn] = field(default_factory=list)
 
     # ── Accumulator (cập nhật mỗi iteration) ──

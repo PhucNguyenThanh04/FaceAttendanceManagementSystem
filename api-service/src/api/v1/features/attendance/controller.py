@@ -35,7 +35,7 @@ async def create_attendance_event(
 
 @router.get("/events", response_model=list[schemas.AttendanceEventRead])
 async def list_attendance_events(
-    query: schemas.AttendanceEventListQuery ,
+    query: schemas.AttendanceEventListQuery = Depends(),
     service: AttendanceService = Depends(get_attendance_read_service),
     _: User = Depends(get_current_user_or_rag_api_key),
 ) -> list[schemas.AttendanceEventRead]:

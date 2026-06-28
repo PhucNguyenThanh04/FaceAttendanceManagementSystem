@@ -12,8 +12,12 @@ from src.rag.retrieval.retrieval_pipeline import (
     RetrievalPipeline,
     get_retrieval_pipeline,
 )
+from src.tools.api_queries import (
+    AttendanceQueryTool,
+    EmployeeQueryTool,
+    ShiftQueryTool,
+)
 from src.tools.ask_user_tool import AskUserTool
-from src.tools.database_query_tool import DatabaseQueryTool
 from src.tools.registry import ToolRegistry
 from src.tools.vector_search_tool import VectorSearchTool
 
@@ -39,13 +43,28 @@ class ChatService:
         registry.register(
             VectorSearchTool(
                 retrieval_pipeline=self.retrieval_pipeline,
-                allowed_role=request.role,
+                allowed_role=request.user_role,
             )
         )
         registry.register(
-            DatabaseQueryTool(
+            EmployeeQueryTool(
                 api_service_client=self.api_service_client,
                 employee_id=request.employee_id,
+                user_role=request.user_role,
+            )
+        )
+        registry.register(
+            ShiftQueryTool(
+                api_service_client=self.api_service_client,
+                employee_id=request.employee_id,
+                user_role=request.user_role,
+            )
+        )
+        registry.register(
+            AttendanceQueryTool(
+                api_service_client=self.api_service_client,
+                employee_id=request.employee_id,
+                user_role=request.user_role,
             )
         )
         registry.register(AskUserTool())

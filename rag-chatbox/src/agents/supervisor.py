@@ -2,20 +2,18 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import asdict
 from datetime import date
 from typing import Any
 
 from src.agents.executor import Executor
 from src.agents.state import AgentState, AgentStep
+from src.core.settings import get_settings
 from src.features.chat.schemas import ChatRequest
 from src.integrations.llm.client import GeminiClient, LLMError
 from src.integrations.llm.prompts import PromptBuilder
 from src.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
-
-MAX_STEPS = 5
 
 
 class Supervisor:
@@ -29,10 +27,17 @@ class Supervisor:
     def __init__(
         self,
         llm_client: GeminiClient,
-        max_steps: int = MAX_STEPS,
+        max_steps: int | None = None,
+        prompt_builder: PromptBuilder | None = None,
     ) -> None:
+        settings = get_settings() if max_steps is None or prompt_builder is None else None
         self.llm_client = llm_client
-        self.max_steps = max_steps
+        self.max_steps = max_steps if max_steps is not None else settings.agent_max_steps
+        self.prompt_builder = (
+            prompt_builder
+            if prompt_builder is not None
+            else PromptBuilder.from_settings(settings)
+        )
 
     async def run(
         self,
@@ -42,8 +47,7 @@ class Supervisor:
         state = AgentState(
             user_message=request.message,
             employee_id=request.employee_id,
-            user_role=request.role,
-            conversation_id=request.conversation_id,
+            user_role=request.user_role,
             chat_history=list(request.chat_history),
         )
 
@@ -54,9 +58,10 @@ class Supervisor:
         )
 
         logger.info(
-            "Supervisor started | employee_id=%s role=%s message=%s",
+            "Supervisor started | employee_id=%s user_role=%s chat_history_count=%d message=%s",
             request.employee_id,
-            request.role,
+            request.user_role,
+            len(request.chat_history),
             request.message[:80],
         )
 
@@ -82,13 +87,6 @@ class Supervisor:
                 )
                 action_input = {}
 
-            logger.info(
-                "Supervisor step | step=%d action=%s thought=%s",
-                state.step_count + 1,
-                action,
-                thought[:80],
-            )
-
             if action == "final_answer":
                 state.add_step(
                     AgentStep(
@@ -98,6 +96,7 @@ class Supervisor:
                         observation="",
                     )
                 )
+                self._log_step(state, state.steps[-1])
                 answer = str(action_input.get("answer") or thought or "")
                 if not action_input.get("answer"):
                     logger.warning("final_answer action missing answer field")
@@ -111,12 +110,14 @@ class Supervisor:
                     action=action,
                     action_input=action_input,
                     observation=result.observation,
+                    is_error=result.is_error,
                     citations=result.citations,
                     used_context=result.used_context,
                     low_confidence=result.low_confidence,
                     metadata=result.metadata,
                 )
             )
+            self._log_step(state, state.steps[-1])
 
             if result.is_ask_user:
                 state.finish_with_ask_user(result.ask_user_payload or {})
@@ -125,8 +126,9 @@ class Supervisor:
         if not state.is_done:
             state.finish_max_steps()
             logger.warning(
-                "Supervisor max steps reached | employee_id=%s message=%s",
+                "Supervisor max steps reached | employee_id=%s actions=%s message=%s",
                 request.employee_id,
+                [step.action for step in state.steps],
                 request.message[:80],
             )
 
@@ -142,10 +144,8 @@ class Supervisor:
         state: AgentState,
         system_prompt: str,
     ) -> dict[str, Any]:
-        scratchpad = PromptBuilder.build_scratchpad(
-            [asdict(step) for step in state.steps]
-        )
-        user_prompt = PromptBuilder.build_react_prompt(
+        scratchpad = self.prompt_builder.build_scratchpad(state.steps)
+        user_prompt = self.prompt_builder.build_react_prompt(
             user_message=state.user_message,
             chat_history=state.chat_history,
             scratchpad=scratchpad,
@@ -163,3 +163,16 @@ class Supervisor:
             raise ValueError(f"Gemini response thiếu field 'action': {parsed}")
 
         return parsed
+
+    @staticmethod
+    def _log_step(state: AgentState, step: AgentStep) -> None:
+        logger.info(
+            "Supervisor step | step=%d action=%s is_error=%s "
+            "used_context=%s low_confidence=%s observation_length=%d",
+            state.step_count,
+            step.action,
+            step.is_error,
+            step.used_context,
+            step.low_confidence,
+            len(step.observation or ""),
+        )

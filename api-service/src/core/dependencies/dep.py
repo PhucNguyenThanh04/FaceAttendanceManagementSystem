@@ -19,4 +19,8 @@ def get_ai_http_client(request: Request) -> httpx.AsyncClient:
     return ai_http
 
 
-
+def get_chatbox_http_client(request: Request) -> httpx.AsyncClient:
+    chatbox_http = getattr(request.app.state, "chatbox_http", None)
+    if chatbox_http is None:
+        raise RuntimeError("Chatbox HTTP client chưa được khởi tạo trong app.state")
+    return chatbox_http

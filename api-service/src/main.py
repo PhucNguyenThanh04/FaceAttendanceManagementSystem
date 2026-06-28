@@ -36,6 +36,7 @@ def parse_cors_origins(raw_origins: str) -> list[str]:
 async def lifespan(app: FastAPI):
     redis_client = None
     ai_http_client = None
+    chatbox_http_client = None
 
     try:
         # Startup
@@ -73,6 +74,13 @@ async def lifespan(app: FastAPI):
             limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
         )
         app.state.ai_http = ai_http_client
+
+        chatbox_http_client = httpx.AsyncClient(
+            base_url=settings.rag_api_url.rstrip("/"),
+            timeout=httpx.Timeout(120.0, connect=5.0),
+            limits=httpx.Limits(max_connections=50, max_keepalive_connections=10),
+        )
+        app.state.chatbox_http = chatbox_http_client
         logger.info(
             "HTTP client khởi tạo thành công"
         )
@@ -82,6 +90,9 @@ async def lifespan(app: FastAPI):
         logger.exception("Lỗi khởi tạo tài nguyên trong lifespan")
         raise
     finally:
+        if chatbox_http_client is not None:
+            await chatbox_http_client.aclose()
+            logger.info("Chatbox HTTP client đã đóng")
         if ai_http_client is not None:
             await ai_http_client.aclose()
             logger.info("HTTP client đã đóng")

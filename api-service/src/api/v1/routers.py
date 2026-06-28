@@ -2,6 +2,8 @@ from fastapi import APIRouter
 
 from src.api.v1.features.attendance.controller import router as attendance_router
 from src.api.v1.features.auth.controller import router as auth_router
+from src.api.v1.features.chat.controller import router as conversations_router
+from src.api.v1.features.documents.controller import router as documents_router
 from src.api.v1.features.employee_onboarding.controller import (
     router as employee_onboarding_router,
 )
@@ -30,3 +32,5 @@ api_router.include_router(assignment_router)
 api_router.include_router(attendance_router)
 api_router.include_router(face_profile_router)
 api_router.include_router(upload_avatar_router)
+api_router.include_router(documents_router)
+api_router.include_router(conversations_router)

@@ -1,14 +1,19 @@
-from fastapi import UploadFile, HTTPException, File, Form, Depends
-from dataclasses import dataclass
+from fastapi import Depends, HTTPException, UploadFile
 from typing import Any
 
 from src.rag.ingestion.pipeline import IngestionPipeline
 from src.core.dependenci import get_ingestion_pipeline
-from src.features.documents.schemas import DocumentIngestResponse
+from src.core.settings import get_settings
+from src.features.documents.schemas import (
+    DocumentIngestResponse,
+    DocumentVectorDeleteResponse,
+)
 
 from src.core.setup_logging import setup_logger
 
 logger = setup_logger(__name__)
+settings = get_settings()
+
 
 class DocumentService:
     def __init__(self,
@@ -47,6 +52,32 @@ class DocumentService:
             keyword_indexed=result.keyword_indexed,
             error_code=result.error_code,
             message=result.message,
+        )
+
+    async def delete_document_vectors(
+        self,
+        document_id: str,
+    ) -> DocumentVectorDeleteResponse:
+        normalized_document_id = document_id.strip()
+        if not normalized_document_id:
+            raise ValueError("document_id must not be empty")
+
+        deleted = await self.ingestion_pipeline.delete_document(
+            document_id=normalized_document_id,
+        )
+        if not deleted:
+            raise RuntimeError("Failed to delete document vectors")
+
+        collection = settings.default_qdrant_collection
+        return DocumentVectorDeleteResponse(
+            document_id=normalized_document_id,
+            collection=collection,
+            status="deleted",
+            deleted=True,
+            message=(
+                "Document vectors deleted successfully from collection "
+                f"{collection}"
+            ),
         )
 
 

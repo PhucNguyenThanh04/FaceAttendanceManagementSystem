@@ -40,9 +40,10 @@ from src.api.v1.features.leaves.models import (  # noqa: F401
 from src.api.v1.features.notifications.models import Notification  # noqa: F401
 from src.api.v1.features.audit.models import AuditLog  # noqa: F401
 from src.api.v1.features.system.models import SystemSetting  # noqa: F401
-from src.api.v1.features.knowledge_base.models import (  # noqa: F401
-    ChatMessage, Conversation, Document
+from src.api.v1.features.chat.models import (  # noqa: F401
+    ChatMessage, Conversation
 )
+from src.api.v1.features.documents.models import Document  # noqa: F401
 
 # ── 2. Đọc DATABASE_URL từ biến môi trường ────────────────────────────────
 # Alembic dùng psycopg2 (sync), không phải asyncpg

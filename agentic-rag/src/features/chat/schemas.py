@@ -12,6 +12,7 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1)
     employee_id: str
     user_role: str = Field(..., min_length=1)
+    conversation_id: str = Field(..., min_length=1)
     chat_history: list[ChatHistoryTurn] = Field(default_factory=list)
 
 

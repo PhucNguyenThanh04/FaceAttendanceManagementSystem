@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from fastapi import Depends
+from redis.asyncio import Redis
 
+from src.agents.pending_store import AgentPendingStore
 from src.agents.state import AgentState
 from src.agents.supervisor import Supervisor
-from src.core.dependenci import get_api_service_client
+from src.core.dependenci import get_api_service_client, get_redis_client
 from src.features.chat.schemas import ChatCitation, ChatRequest, ChatResponse
 from src.integrations.api_service.clients import APIServiceClient
 from src.integrations.llm.client import GeminiClient, get_gemini_client
@@ -28,10 +30,14 @@ class ChatService:
         retrieval_pipeline: RetrievalPipeline,
         api_service_client: APIServiceClient,
         llm_client: GeminiClient,
+        pending_store: AgentPendingStore,
     ) -> None:
         self.retrieval_pipeline = retrieval_pipeline
         self.api_service_client = api_service_client
-        self.supervisor = Supervisor(llm_client=llm_client)
+        self.supervisor = Supervisor(
+            llm_client=llm_client,
+            pending_store=pending_store,
+        )
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
         registry = self._build_registry(request)
@@ -138,9 +144,11 @@ def _collect_citations(state: AgentState) -> list[ChatCitation]:
 def get_chat_service(
     retrieval_pipeline: RetrievalPipeline = Depends(get_retrieval_pipeline),
     api_service_client: APIServiceClient = Depends(get_api_service_client),
+    redis_client: Redis = Depends(get_redis_client),
 ) -> ChatService:
     return ChatService(
         retrieval_pipeline=retrieval_pipeline,
         api_service_client=api_service_client,
         llm_client=get_gemini_client(),
+        pending_store=AgentPendingStore(redis_client),
     )

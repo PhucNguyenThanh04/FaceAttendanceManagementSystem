@@ -20,7 +20,6 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
 @router.post("/", response_model=schemas.DocumentRead, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     title: str = Form(...),
-    department_id: int | None = Form(default=None),
     allowed_roles: list[str] = Form(...),
     file: UploadFile = File(...),
     service: DocumentService = Depends(get_document_service),
@@ -29,7 +28,6 @@ async def upload_document(
 ) -> schemas.DocumentRead:
     return await service.upload_document(
         title=title,
-        department_id=department_id,
         allowed_roles=allowed_roles,
         file=file,
         current_employee=current_employee,

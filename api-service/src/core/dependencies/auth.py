@@ -56,7 +56,7 @@ async def get_current_user_or_rag_api_key(
     credentials: HTTPAuthorizationCredentials | None = Security(optional_bearer_scheme),
     rag_api_key: str | None = Security(_rag_api_key_header),
 ) -> User | None:
-    # Nhánh internal — rag-chatbox gọi
+    # Nhánh internal — agentic-rag gọi
     if rag_api_key:
         if not secrets.compare_digest(rag_api_key, settings.rag_api_key):
             raise UnauthorizedException("Rag API key không hợp lệ")

@@ -14,7 +14,7 @@ class APIServerPaths:
 
 
 class APIAttendanceEventCreate(BaseModel):
-    """Payload attendance_service sends to api-service after stable face recognition."""
+    """Payload attendance-service sends to api-service after stable face recognition."""
 
     employee_id: UUID = Field(..., description="employees.employee_id in api-service")
     event_time: datetime | None = None

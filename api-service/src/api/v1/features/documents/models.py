@@ -11,7 +11,7 @@ from src.api.v1.shared.enums import DocumentStatus
 from src.core.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
-    from src.api.v1.features.staff.models import Department, Employee
+    from src.api.v1.features.staff.models import Employee
 
 
 class Document(Base, TimestampMixin):
@@ -25,13 +25,8 @@ class Document(Base, TimestampMixin):
     )
     title: Mapped[str] = mapped_column(Text, nullable=False)
     file_name: Mapped[str] = mapped_column(Text, nullable=False)
+    file_url: Mapped[str] = mapped_column(Text, nullable=False)
     file_type: Mapped[str] = mapped_column(String, nullable=False)
-    department_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("departments.department_id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-        comment="NULL means company-wide document",
-    )
     uploaded_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("employees.employee_id", ondelete="SET NULL"),
@@ -60,7 +55,6 @@ class Document(Base, TimestampMixin):
     )
     qdrant_collection: Mapped[str] = mapped_column(Text, nullable=False)
 
-    department: Mapped[Optional["Department"]] = relationship(lazy="selectin")
     uploader: Mapped[Optional["Employee"]] = relationship(
         foreign_keys=[uploaded_by],
         lazy="selectin",

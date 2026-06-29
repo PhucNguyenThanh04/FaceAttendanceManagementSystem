@@ -9,10 +9,10 @@ from pydantic import BaseModel, Field
 
 class AttendanceRecognitionRequest(BaseModel):
     """
-    Payload attendance_service sends to api-service after a stable face recognition.
+    Payload attendance-service sends to api-service after a stable face recognition.
 
     api-service owns the attendance business rules, so this request only
-    describes what attendance_service recognized from the camera/Qdrant pipeline.
+    describes what attendance-service recognized from the camera/Qdrant pipeline.
     """
 
     employee_id: UUID = Field(..., description="employees.employee_id from api-service")
@@ -46,11 +46,11 @@ class AttendanceRecognitionRequest(BaseModel):
     )
     image_url: str | None = Field(
         default=None,
-        description="Optional evidence image URL if attendance_service stores snapshots",
+        description="Optional evidence image URL if attendance-service stores snapshots",
     )
     raw_result: dict[str, Any] | None = Field(
         default=None,
-        description="Extra debug metadata from attendance_service",
+        description="Extra debug metadata from attendance-service",
     )
 
 

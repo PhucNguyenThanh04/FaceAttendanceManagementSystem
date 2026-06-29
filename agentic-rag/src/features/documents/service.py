@@ -21,6 +21,15 @@ class DocumentService:
     ) -> None:
         self.ingestion_pipeline = ingestion_pipeline
 
+    @staticmethod
+    def _normalize_allowed_roles(allowed_roles: list[Any]) -> list[str]:
+        return [
+            role.strip()
+            for item in allowed_roles
+            for role in str(item).split(",")
+            if role.strip()
+        ]
+
     async def ingestion(self,
         file: UploadFile,
         document_id: str,
@@ -29,12 +38,13 @@ class DocumentService:
         allowed_roles: list[Any],
     ) -> DocumentIngestResponse:
         try:
+            normalized_allowed_roles = self._normalize_allowed_roles(allowed_roles)
             result = await self.ingestion_pipeline.ingestion(
                 file=file,
                 document_id=document_id,
                 filename=filename,
                 file_path=file_path,
-                allowed_roles=allowed_roles,
+                allowed_roles=normalized_allowed_roles,
             )
         except ValueError as exc:
             logger.error(f"Ingestion failed for document {document_id}: {exc}")

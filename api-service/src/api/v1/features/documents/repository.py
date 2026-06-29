@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.features.documents import schemas
 from src.api.v1.features.documents.models import Document
-from src.api.v1.features.staff.models import Department
 from src.api.v1.shared.enums import DocumentStatus
 from src.core.db.database import get_db
 from src.core.exceptions import DatabaseException, NotFoundException
@@ -20,12 +19,6 @@ logger = setup_logger(__name__)
 class DocumentRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
-
-    async def department_exists(self, department_id: int) -> bool:
-        stmt = select(Department.department_id).where(
-            Department.department_id == department_id
-        )
-        return (await self.db.execute(stmt)).first() is not None
 
     async def get_document_by_id(self, document_id: uuid.UUID) -> Document | None:
         return await self.db.scalar(select(Document).where(Document.id == document_id))
@@ -42,8 +35,8 @@ class DocumentRepository:
         document_id: uuid.UUID,
         title: str,
         file_name: str,
+        file_url: str,
         file_type: str,
-        department_id: int | None,
         uploaded_by: uuid.UUID,
         allowed_roles: list[str],
         qdrant_collection: str,
@@ -52,8 +45,8 @@ class DocumentRepository:
             id=document_id,
             title=title,
             file_name=file_name,
+            file_url=file_url,
             file_type=file_type,
-            department_id=department_id,
             uploaded_by=uploaded_by,
             allowed_roles=allowed_roles,
             status=DocumentStatus.processing,
@@ -114,8 +107,6 @@ class DocumentRepository:
                     func.lower(Document.file_name).like(f"%{term}%"),
                 )
             )
-        if query.department_id is not None:
-            stmt = stmt.where(Document.department_id == query.department_id)
         if query.uploaded_by is not None:
             stmt = stmt.where(Document.uploaded_by == query.uploaded_by)
         if query.allowed_role:

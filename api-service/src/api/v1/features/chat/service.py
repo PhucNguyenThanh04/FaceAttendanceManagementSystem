@@ -132,6 +132,7 @@ class ConversationService:
                     message=payload.message,
                     employee_id=str(current_employee.employee_id),
                     user_role=current_user.role_name.value,
+                    conversation_id=str(conversation_id),
                     chat_history=chat_history,
                 )
             )

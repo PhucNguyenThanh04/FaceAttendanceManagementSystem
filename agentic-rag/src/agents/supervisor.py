@@ -6,6 +6,7 @@ from datetime import date
 from typing import Any
 
 from src.agents.executor import Executor
+from src.agents.pending_store import AgentPendingStore
 from src.agents.state import AgentState, AgentStep
 from src.core.settings import get_settings
 from src.features.chat.schemas import ChatRequest
@@ -14,6 +15,8 @@ from src.integrations.llm.prompts import PromptBuilder
 from src.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
+
+MAX_ASK_USER_COUNT = 2
 
 
 class Supervisor:
@@ -27,11 +30,13 @@ class Supervisor:
     def __init__(
         self,
         llm_client: GeminiClient,
+        pending_store: AgentPendingStore | None = None,
         max_steps: int | None = None,
         prompt_builder: PromptBuilder | None = None,
     ) -> None:
         settings = get_settings() if max_steps is None or prompt_builder is None else None
         self.llm_client = llm_client
+        self.pending_store = pending_store
         self.max_steps = max_steps if max_steps is not None else settings.agent_max_steps
         self.prompt_builder = (
             prompt_builder
@@ -44,12 +49,7 @@ class Supervisor:
         request: ChatRequest,
         registry: ToolRegistry,
     ) -> AgentState:
-        state = AgentState(
-            user_message=request.message,
-            employee_id=request.employee_id,
-            user_role=request.user_role,
-            chat_history=list(request.chat_history),
-        )
+        state = await self._build_initial_state(request)
 
         executor = Executor(registry)
         system_prompt = PromptBuilder.build_system_prompt(
@@ -86,6 +86,15 @@ class Supervisor:
                     type(action_input).__name__,
                 )
                 action_input = {}
+
+            if action == "ask_user" and self._ask_user_count(state) >= MAX_ASK_USER_COUNT:
+                logger.warning(
+                    "Max ask_user count reached | conversation_id=%s count=%d",
+                    request.conversation_id,
+                    self._ask_user_count(state),
+                )
+                state.finish_with_error("Không đủ thông tin để trả lời.")
+                break
 
             if action == "final_answer":
                 state.add_step(
@@ -132,12 +141,87 @@ class Supervisor:
                 request.message[:80],
             )
 
+        await self._sync_pending_state(request.conversation_id, state)
+
         logger.info(
             "Supervisor finished | reason=%s steps=%d",
             state.finish_reason,
             state.step_count,
         )
         return state
+
+    async def _build_initial_state(self, request: ChatRequest) -> AgentState:
+        if self.pending_store is not None:
+            pending = await self.pending_store.get_pending(request.conversation_id)
+            if pending is not None:
+                try:
+                    if (
+                        str(pending.get("employee_id")) != request.employee_id
+                        or str(pending.get("user_role")) != request.user_role
+                    ):
+                        logger.warning(
+                            "Pending state context mismatch | conversation_id=%s",
+                            request.conversation_id,
+                        )
+                        await self.pending_store.delete_pending(request.conversation_id)
+                    else:
+                        state = AgentState.from_pending_dict(pending)
+                        state.resume_from_ask_user_answer(request.message)
+                        logger.info(
+                            "Supervisor resumed pending state | conversation_id=%s steps=%d",
+                            request.conversation_id,
+                            state.step_count,
+                        )
+                        return state
+                except (KeyError, TypeError, ValueError) as exc:
+                    logger.warning(
+                        "Invalid pending state, starting a new loop | "
+                        "conversation_id=%s error=%s",
+                        request.conversation_id,
+                        exc,
+                    )
+                    await self.pending_store.delete_pending(request.conversation_id)
+
+        return AgentState(
+            user_message=request.message,
+            employee_id=request.employee_id,
+            user_role=request.user_role,
+            chat_history=list(request.chat_history),
+        )
+
+    async def _sync_pending_state(
+        self,
+        conversation_id: str,
+        state: AgentState,
+    ) -> None:
+        if self.pending_store is None:
+            return
+
+        if state.finish_reason == "ask_user":
+            try:
+                await self.pending_store.save_pending(
+                    conversation_id,
+                    state.to_pending_dict(),
+                )
+            except Exception as exc:
+                logger.error(
+                    "Failed to save agent pending state: conversation_id=%s error=%s",
+                    conversation_id,
+                    exc,
+                    exc_info=True,
+                )
+                await self.pending_store.delete_pending(conversation_id)
+                state.finish_with_error(
+                    "Xin lỗi, tôi chưa thể lưu trạng thái cần hỏi thêm. "
+                    "Bạn vui lòng thử lại."
+                )
+            return
+
+        await self.pending_store.delete_pending(conversation_id)
+
+    @staticmethod
+    def _ask_user_count(state: AgentState) -> int:
+        return sum(1 for step in state.steps if step.action == "ask_user")
 
     async def _call_llm(
         self,

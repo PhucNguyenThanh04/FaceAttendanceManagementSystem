@@ -374,7 +374,7 @@ class AttendancePipeline:
                 "qdrant_id": person.qdrant_id,
                 "frame_index": frame_index,
                 "recognized_at": recognized_at.isoformat(),
-                "source": "attendance_service.attendance_pipeline",
+                "source": "attendance-service.attendance_pipeline",
             },
         )
 

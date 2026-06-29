@@ -58,7 +58,12 @@ class DocumentService:
 
     @staticmethod
     def _normalize_allowed_roles(allowed_roles: list[str]) -> list[str]:
-        normalized = [role.strip() for role in allowed_roles if role.strip()]
+        normalized = [
+            role.strip()
+            for item in allowed_roles
+            for role in item.split(",")
+            if role.strip()
+        ]
         if not normalized:
             raise BadRequestException("allowed_roles is required")
         if len(normalized) != len(set(normalized)):
@@ -76,7 +81,6 @@ class DocumentService:
         self,
         *,
         title: str,
-        department_id: int | None,
         allowed_roles: list[str],
         file: UploadFile,
         current_employee: Employee,
@@ -92,10 +96,6 @@ class DocumentService:
             raise BadRequestException("Empty file is not allowed")
         if len(file_bytes) > MAX_DOCUMENT_SIZE:
             raise BadRequestException("File size must be less than 25MB")
-        if department_id is not None and not await self.document_repository.department_exists(
-            department_id
-        ):
-            raise BadRequestException("Department not found")
 
         document_id = uuid.uuid4()
         stored_filename = f"{document_id}_{safe_original_filename}"
@@ -113,8 +113,8 @@ class DocumentService:
                 document_id=document_id,
                 title=normalized_title,
                 file_name=stored_filename,
+                file_url=public_file_path,
                 file_type=file_type,
-                department_id=department_id,
                 uploaded_by=current_employee.employee_id,
                 allowed_roles=normalized_allowed_roles,
                 qdrant_collection=PENDING_QDRANT_COLLECTION,

@@ -17,7 +17,7 @@ logger = setup_logger(__name__)
 
 
 class ApiServerClient:
-    """Small HTTP client used by attendance_service to call api-service."""
+    """Small HTTP client used by attendance-service to call api-service."""
 
     def __init__(self, http_client: httpx.AsyncClient) -> None:
         self._http = http_client

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 from urllib.parse import quote
+from uuid import uuid4
 
 import httpx
 
@@ -66,17 +67,18 @@ class ChatboxClient:
             ("file_path", normalized_file_path),
             *[("allowed_roles", role) for role in normalized_allowed_roles],
         ]
+        body, content_type_header = self._build_multipart_body(
+            fields=form_data,
+            file_field="file",
+            file_name=upload_filename or normalized_filename,
+            file_content=file_bytes,
+            file_content_type=content_type,
+        )
         data = await self._request_json(
             method="POST",
             path=ChatboxPaths.DOCUMENTS,
-            data=form_data,
-            files={
-                "file": (
-                    upload_filename or normalized_filename,
-                    file_bytes,
-                    content_type,
-                )
-            },
+            content=body,
+            headers={"Content-Type": content_type_header},
         )
         return DocumentIngestResponse.model_validate(data)
 
@@ -119,6 +121,53 @@ class ChatboxClient:
             response.text,
         )
         return response.json()
+
+    @staticmethod
+    def _build_multipart_body(
+        *,
+        fields: list[tuple[str, str]],
+        file_field: str,
+        file_name: str,
+        file_content: bytes,
+        file_content_type: str,
+    ) -> tuple[bytes, str]:
+        boundary = f"----chatbox-{uuid4().hex}"
+        chunks: list[bytes] = []
+
+        for name, value in fields:
+            chunks.extend(
+                [
+                    f"--{boundary}\r\n".encode(),
+                    (
+                        "Content-Disposition: form-data; "
+                        f'name="{ChatboxClient._escape_multipart_value(name)}"'
+                        "\r\n\r\n"
+                    ).encode(),
+                    str(value).encode("utf-8"),
+                    b"\r\n",
+                ]
+            )
+
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode(),
+                (
+                    "Content-Disposition: form-data; "
+                    f'name="{ChatboxClient._escape_multipart_value(file_field)}"; '
+                    f'filename="{ChatboxClient._escape_multipart_value(file_name)}"'
+                    "\r\n"
+                ).encode(),
+                f"Content-Type: {file_content_type}\r\n\r\n".encode(),
+                file_content,
+                b"\r\n",
+                f"--{boundary}--\r\n".encode(),
+            ]
+        )
+        return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
+
+    @staticmethod
+    def _escape_multipart_value(value: str) -> str:
+        return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def get_chatbox_client(http_client: httpx.AsyncClient) -> ChatboxClient:

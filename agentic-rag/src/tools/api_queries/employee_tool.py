@@ -18,6 +18,8 @@ class EmployeeQueryTool(BaseTool):
         "số điện thoại, ngày vào làm hoặc ngày nghỉ việc. "
         "Không nhận employee_id từ LLM và không truy vấn nhân viên khác."
     )
+    usage_hint = "Tra cứu hồ sơ nhân viên hiện tại."
+    input_example = "{}"
     args_schema = EmployeeQueryInput
 
     def __init__(

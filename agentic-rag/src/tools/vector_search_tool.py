@@ -25,6 +25,8 @@ class VectorSearchTool(BaseTool):
         "Tìm kiếm thông tin trong tài liệu nội bộ bằng vector/RAG search. "
         "Dùng khi cần tra cứu chính sách, nội quy, quy trình hoặc tài liệu đã index."
     )
+    usage_hint = "Tìm nội quy, chính sách, quy định trong tài liệu."
+    input_example = '{"query":"câu hỏi ngắn"}'
     args_schema = VectorSearchInput
 
     def __init__(

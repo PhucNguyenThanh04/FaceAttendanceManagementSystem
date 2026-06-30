@@ -275,6 +275,8 @@ class Supervisor:
             user_message=state.user_message,
             chat_history=state.chat_history,
             scratchpad=scratchpad,
+            current_step=state.step_count,
+            max_steps=self.max_steps,
         )
 
         response = await self.llm_client.generate_json(

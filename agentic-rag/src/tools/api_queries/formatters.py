@@ -76,6 +76,9 @@ def format_attendance_events(
         )
 
     if len(events) > max_events_to_show:
-        lines.append(f"\nCòn {len(events) - max_events_to_show} event chưa hiển thị.")
+        lines.append(
+            f"\nCòn {len(events) - max_events_to_show} event chưa hiển thị. "
+            f"Dùng page={query.page + 1} để xem thêm."
+        )
 
     return "\n".join(lines)

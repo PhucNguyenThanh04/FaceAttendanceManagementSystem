@@ -51,51 +51,21 @@ class ToolRegistry:
         """
         Tạo mô tả compact cho LLM prompt.
 
-        Không dump toàn bộ JSON schema để tránh model nhỏ sinh nhầm field.
+        Đọc usage_hint và input_example từ chính tool class,
+        không hardcode mapping ở đây.
         """
         if not self._tools:
             return "Không có tool nào khả dụng."
 
         lines = ["TOOLS:"]
         for tool in self._tools.values():
+            hint = tool.usage_hint or tool.description
             lines.append(
-                "- "
-                f"{tool.name}: {self._compact_usage(tool)} "
-                f"Input: {self._input_example(tool.name)}"
+                f"- {tool.name}: {hint} "
+                f"Input: {tool.input_example}"
             )
 
         return "\n".join(lines)
-
-    @staticmethod
-    def _compact_usage(tool: BaseTool) -> str:
-        usage_by_name = {
-            "employee_query": "Tra cứu hồ sơ nhân viên hiện tại.",
-            "shift_query": "Tra cứu ca làm hoặc lịch làm việc.",
-            "attendance_query": "Tra cứu chấm công, check-in/out, đi trễ/về sớm.",
-            "vector_search": "Tìm nội quy, chính sách, quy định trong tài liệu.",
-            "ask_user": "Hỏi thêm khi thiếu thông tin mà tool không tự lấy được.",
-        }
-        return usage_by_name.get(tool.name, tool.description)
-
-    @staticmethod
-    def _input_example(tool_name: str) -> str:
-        examples = {
-            "employee_query": "{}",
-            "shift_query": '{"as_of":"YYYY-MM-DD"} hoặc {}',
-            "attendance_query": (
-                '{"event_type":"check_in|check_out|unknown",'
-                '"accepted":true,'
-                '"event_time_from":"ISO datetime",'
-                '"event_time_to":"ISO datetime"} hoặc {}'
-            ),
-            "vector_search": '{"query":"câu hỏi ngắn"}',
-            "ask_user": (
-                '{"question":"câu hỏi",'
-                '"options":[],'
-                '"allow_free_text":true}'
-            ),
-        }
-        return examples.get(tool_name, "{}")
 
     def __len__(self) -> int:
         return len(self._tools)

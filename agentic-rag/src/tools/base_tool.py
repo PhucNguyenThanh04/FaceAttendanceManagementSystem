@@ -22,6 +22,8 @@ class BaseTool(ABC):
     name: str
     description: str  # LLM đọc cái này để biết chọn tool nào
     args_schema: type[BaseModel] | None = None
+    usage_hint: str = ""          # Mô tả ngắn gọn cho LLM prompt (fallback về description)
+    input_example: str = "{}"     # Ví dụ action_input cho LLM prompt
 
     @abstractmethod
     async def run(self, **kwargs) -> str | ToolResult:

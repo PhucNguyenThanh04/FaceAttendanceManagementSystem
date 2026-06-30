@@ -22,6 +22,13 @@ class AttendanceQueryTool(BaseTool):
         "hoặc các event trong một khoảng thời gian. "
         "Không nhận employee_id từ LLM và không truy vấn nhân viên khác."
     )
+    usage_hint = "Tra cứu chấm công, check-in/out, đi trễ/về sớm."
+    input_example = (
+        '{"event_type":"check_in|check_out|unknown",'
+        '"accepted":true,'
+        '"event_time_from":"ISO datetime",'
+        '"event_time_to":"ISO datetime"} hoặc {}'
+    )
     args_schema = AttendanceQueryInput
 
     def __init__(

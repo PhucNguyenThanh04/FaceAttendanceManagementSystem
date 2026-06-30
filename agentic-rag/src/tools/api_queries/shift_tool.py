@@ -20,6 +20,8 @@ class ShiftQueryTool(BaseTool):
         "ngưỡng đi trễ/về sớm hoặc số phút làm việc yêu cầu. "
         "Không nhận employee_id từ LLM và không truy vấn nhân viên khác."
     )
+    usage_hint = "Tra cứu ca làm hoặc lịch làm việc."
+    input_example = '{"as_of":"YYYY-MM-DD"} hoặc {}'
     args_schema = ShiftQueryInput
 
     def __init__(

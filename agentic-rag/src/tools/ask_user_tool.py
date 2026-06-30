@@ -33,6 +33,12 @@ class AskUserTool(BaseTool):
         "Có thể cung cấp options gợi ý cho user chọn. "
         "Không dùng khi đã đủ thông tin để tra cứu."
     )
+    usage_hint = "Hỏi thêm khi thiếu thông tin mà tool không tự lấy được."
+    input_example = (
+        '{"question":"câu hỏi",'
+        '"options":[],'
+        '"allow_free_text":true}'
+    )
     args_schema = AskUserInput
 
     async def run(

@@ -17,18 +17,25 @@ class Settings(BaseSettings):
     # Agent working memory
     agent_max_steps: int = 5
     agent_prompt_window_steps: int = 2
-    agent_action_input_limit_chars: int = 700        
-    agent_default_observation_limit_chars: int = 1000
-    agent_error_observation_limit_chars: int = 400  
+    agent_prompt_action_input_limit_chars: int = 700
+    agent_prompt_default_observation_limit_chars: int = 1000
+    agent_prompt_error_observation_limit_chars: int = 400
     chat_history_window_messages: int = 6
+
+    # Per-tool observation limits (chars)
+    agent_prompt_vector_search_limit_chars: int = 1500
+    agent_prompt_attendance_query_limit_chars: int = 900
+    agent_prompt_employee_query_limit_chars: int = 700
+    agent_prompt_shift_query_limit_chars: int = 700
+    agent_prompt_ask_user_limit_chars: int = 500
 
     agent_tool_observation_limits: dict[str, int] = Field(
         default_factory=lambda: {
-            "vector_search": 1500,  
+            "vector_search": 1500,
             "attendance_query": 900,
             "employee_query": 700,
             "shift_query": 700,
-            "ask_user": 500,       
+            "ask_user": 500,
         }
     )
 

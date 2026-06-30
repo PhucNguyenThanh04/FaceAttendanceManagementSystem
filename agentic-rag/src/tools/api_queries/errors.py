@@ -11,7 +11,7 @@ def format_api_error(exc: ValidationError | httpx.HTTPError) -> str:
     if isinstance(exc, httpx.HTTPStatusError):
         return (
             "api-service trả lỗi khi truy vấn dữ liệu: "
-            f"status={exc.response.status_code}, body={exc.response.text}"
+            f"status={exc.response.status_code}"
         )
 
     return f"Không gọi được api-service: {exc}"

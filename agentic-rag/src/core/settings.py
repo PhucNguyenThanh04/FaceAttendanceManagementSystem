@@ -9,27 +9,26 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 class Settings(BaseSettings):
     # LLM
     google_api_key: str
-    gemini_model: str = "gemini-1.5-flash"
-    llm_temperature: float = 0.1
-    llm_max_output_tokens: int = 2048
-    llm_timeout: float = 30.0
+    gemini_model: str
+    llm_temperature: float 
+    llm_max_output_tokens: int
+    llm_timeout: float
 
     # Agent working memory
     agent_max_steps: int = 5
-    agent_prompt_window_steps: int = 3
-    agent_action_input_limit_chars: int = 1000
-    agent_default_observation_limit_chars: int = 2500
-    agent_error_observation_limit_chars: int = 500
-    # Số message gần nhất đưa vào prompt, không phải số cặp user-assistant.
-    # 6 messages tương đương khoảng 3 lượt user-assistant.
+    agent_prompt_window_steps: int = 2
+    agent_action_input_limit_chars: int = 700        
+    agent_default_observation_limit_chars: int = 1000
+    agent_error_observation_limit_chars: int = 400  
     chat_history_window_messages: int = 6
+
     agent_tool_observation_limits: dict[str, int] = Field(
         default_factory=lambda: {
-            "vector_search": 3000,
-            "attendance_query": 1500,
-            "employee_query": 1000,
-            "shift_query": 1000,
-            "ask_user": 500,
+            "vector_search": 1500,  
+            "attendance_query": 900,
+            "employee_query": 700,
+            "shift_query": 700,
+            "ask_user": 500,       
         }
     )
 

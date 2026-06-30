@@ -26,6 +26,14 @@ export const permissions = {
   onboarding: {
     create: ['admin', 'hr'],
   },
+  documents: {
+    create: ['admin'],
+    delete: ['admin'],
+    read: ['admin'],
+  },
+  chatbox: {
+    use: ['admin', 'hr', 'manager', 'employee'],
+  },
 } as const
 
 export function hasPermission(role: RoleName | null | undefined, allowedRoles: readonly RoleName[]): boolean {

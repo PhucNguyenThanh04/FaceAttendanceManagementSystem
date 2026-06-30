@@ -28,11 +28,13 @@ class ConversationCreate(ConversationBase):
 
 
 class ConversationCreateRequest(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200)
+    title: str | None = Field(default=None, min_length=1, max_length=200)
 
     @field_validator("title")
     @classmethod
-    def validate_title(cls, value: str) -> str:
+    def validate_title(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
         normalized = value.strip()
         if not normalized:
             raise ValueError("title must not be blank")

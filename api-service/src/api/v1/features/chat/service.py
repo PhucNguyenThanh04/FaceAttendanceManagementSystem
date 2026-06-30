@@ -24,6 +24,7 @@ from src.utils.setup_logger import setup_logger
 
 CHAT_HISTORY_WINDOW_MESSAGES = 6
 CHAT_HISTORY_TTL_SECONDS = 60 * 60
+DEFAULT_CONVERSATION_TITLE = "Đoạn chat mới"
 
 logger = setup_logger(__name__)
 
@@ -60,9 +61,10 @@ class ConversationService:
         payload: schemas.ConversationCreateRequest,
         current_employee: Employee,
     ) -> schemas.ConversationRead:
+        title = payload.title or DEFAULT_CONVERSATION_TITLE
         conversation = await self.conversation_repository.create_conversation(
             employee_id=current_employee.employee_id,
-            title=payload.title,
+            title=title,
         )
         return self._to_read(conversation)
 
@@ -121,7 +123,7 @@ class ConversationService:
         current_employee: Employee,
         current_user: User,
     ) -> schemas.SendMessageResponse:
-        await self.conversation_repository.get_conversation_for_employee(
+        conversation = await self.conversation_repository.get_conversation_for_employee(
             conversation_id=conversation_id,
             employee_id=current_employee.employee_id,
         )
@@ -160,6 +162,12 @@ class ConversationService:
             citations=citations,
             ask_user=rag_response.ask_user,
             options=list(rag_response.options or []),
+            title_if_empty=(
+                self._title_from_message(payload.message)
+                if conversation.title == DEFAULT_CONVERSATION_TITLE
+                else None
+            ),
+            replace_title=DEFAULT_CONVERSATION_TITLE,
         )
         await self._append_short_term_history_safely(
             conversation_id=conversation_id,

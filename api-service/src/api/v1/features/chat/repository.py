@@ -96,6 +96,8 @@ class ConversationRepository:
         citations: list[dict] | None,
         ask_user: bool,
         options: list | None,
+        title_if_empty: str | None = None,
+        replace_title: str | None = None,
     ) -> tuple[ChatMessage, ChatMessage]:
         user_message = ChatMessage(
             conversation_id=conversation_id,
@@ -113,6 +115,16 @@ class ConversationRepository:
         conversation = await self.get_conversation_by_id(conversation_id)
         if conversation is None:
             raise NotFoundException("Conversation")
+        if title_if_empty and (
+            replace_title is None or conversation.title == replace_title
+        ):
+            existing_message_id = await self.db.scalar(
+                select(ChatMessage.id)
+                .where(ChatMessage.conversation_id == conversation_id)
+                .limit(1)
+            )
+            if existing_message_id is None:
+                conversation.title = title_if_empty
         conversation.updated_at = func.now()
         self.db.add(user_message)
         self.db.add(assistant_message)

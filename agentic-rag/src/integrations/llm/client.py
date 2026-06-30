@@ -207,21 +207,27 @@ class GeminiClient:
                 ),
                 timeout=self.timeout,
             )
+            duration_ms = (time.perf_counter() - start) * 1000
+            usage = getattr(response, "usage_metadata", None)
+
+            return LLMResponse(
+                content=self._extract_response_text(response),
+                input_tokens=int(getattr(usage, "prompt_token_count", 0) or 0),
+                output_tokens=int(getattr(usage, "candidates_token_count", 0) or 0),
+                model=self.model_name,
+                duration_ms=duration_ms,
+            )
         except asyncio.TimeoutError as exc:
             raise LLMTimeoutError(
                 f"Gemini không phản hồi trong {self.timeout}s"
             ) from exc
-
-        duration_ms = (time.perf_counter() - start) * 1000
-        usage = getattr(response, "usage_metadata", None)
-
-        return LLMResponse(
-            content=self._extract_response_text(response),
-            input_tokens=int(getattr(usage, "prompt_token_count", 0) or 0),
-            output_tokens=int(getattr(usage, "candidates_token_count", 0) or 0),
-            model=self.model_name,
-            duration_ms=duration_ms,
-        )
+        except LLMError:
+            raise
+        except Exception as exc:
+            logger.exception("Gemini API call failed")
+            raise LLMError(
+                f"Gemini API lỗi: {type(exc).__name__}: {exc}"
+            ) from exc
 
     def _build_generation_config(
         self,

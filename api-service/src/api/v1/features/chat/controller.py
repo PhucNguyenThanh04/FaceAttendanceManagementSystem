@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Body, Depends, Response, status
 
 from src.api.v1.features.chat import schemas
 from src.api.v1.features.chat.service import (
@@ -22,12 +22,12 @@ router = APIRouter(prefix="/chat", tags=["Conversations"])
     status_code=status.HTTP_201_CREATED,
 )
 async def create_conversation(
-    payload: schemas.ConversationCreateRequest,
+    payload: schemas.ConversationCreateRequest | None = Body(default=None),
     current_employee: Employee = Depends(get_current_employee),
     service: ConversationService = Depends(get_conversation_service),
 ) -> schemas.ConversationRead:
     return await service.create_conversation(
-        payload=payload,
+        payload=payload or schemas.ConversationCreateRequest(),
         current_employee=current_employee,
     )
 

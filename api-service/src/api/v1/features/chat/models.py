@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class Conversation(Base, TimestampMixin):
-    __tablename__ = "chat"
+    __tablename__ = "conversations"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -54,7 +54,7 @@ class ChatMessage(Base):
     )
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("chat.id", ondelete="CASCADE"),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

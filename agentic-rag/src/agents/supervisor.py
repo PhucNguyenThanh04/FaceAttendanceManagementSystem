@@ -12,6 +12,13 @@ from src.core.settings import get_settings
 from src.features.chat.schemas import ChatRequest
 from src.integrations.llm.client import GeminiClient, LLMError
 from src.integrations.llm.prompts import PromptBuilder
+from src.observability.agent_logs import (
+    log_agent_finish,
+    log_agent_start,
+    log_agent_step,
+    log_agent_tool_dispatch,
+    log_agent_tool_result,
+)
 from src.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -49,7 +56,7 @@ class Supervisor:
         request: ChatRequest,
         registry: ToolRegistry,
     ) -> AgentState:
-        state = await self._build_initial_state(request)
+        state, resumed_pending = await self._build_initial_state(request)
 
         executor = Executor(registry)
         system_prompt = PromptBuilder.build_system_prompt(
@@ -57,6 +64,12 @@ class Supervisor:
             current_date=date.today().isoformat(),
         )
 
+        log_agent_start(
+            conversation_id=request.conversation_id,
+            message=request.message,
+            history_len=len(request.chat_history),
+            has_pending=resumed_pending,
+        )
         logger.info(
             "Supervisor started | employee_id=%s user_role=%s chat_history_count=%d message=%s",
             request.employee_id,
@@ -112,7 +125,22 @@ class Supervisor:
                 state.finish_with_answer(answer)
                 break
 
+            next_step = state.step_count + 1
+            log_agent_tool_dispatch(
+                step=next_step,
+                tool_name=action,
+                tool_input=action_input,
+            )
             result = await executor.execute(action, action_input)
+            log_agent_tool_result(
+                step=next_step,
+                tool_name=action,
+                success=not result.is_error,
+                result_preview=result.observation,
+                used_context=result.used_context,
+                low_confidence=result.low_confidence,
+                is_ask_user=result.is_ask_user,
+            )
             state.add_step(
                 AgentStep(
                     thought=thought,
@@ -148,9 +176,20 @@ class Supervisor:
             state.finish_reason,
             state.step_count,
         )
+        log_agent_finish(
+            conversation_id=request.conversation_id,
+            total_steps=state.step_count,
+            finish_reason=state.finish_reason,
+            used_tools=[
+                step.action
+                for step in state.steps
+                if step.action != "final_answer"
+            ],
+            answer_preview=state.final_answer,
+        )
         return state
 
-    async def _build_initial_state(self, request: ChatRequest) -> AgentState:
+    async def _build_initial_state(self, request: ChatRequest) -> tuple[AgentState, bool]:
         if self.pending_store is not None:
             pending = await self.pending_store.get_pending(request.conversation_id)
             if pending is not None:
@@ -172,7 +211,7 @@ class Supervisor:
                             request.conversation_id,
                             state.step_count,
                         )
-                        return state
+                        return state, True
                 except (KeyError, TypeError, ValueError) as exc:
                     logger.warning(
                         "Invalid pending state, starting a new loop | "
@@ -182,11 +221,14 @@ class Supervisor:
                     )
                     await self.pending_store.delete_pending(request.conversation_id)
 
-        return AgentState(
-            user_message=request.message,
-            employee_id=request.employee_id,
-            user_role=request.user_role,
-            chat_history=list(request.chat_history),
+        return (
+            AgentState(
+                user_message=request.message,
+                employee_id=request.employee_id,
+                user_role=request.user_role,
+                chat_history=list(request.chat_history),
+            ),
+            False,
         )
 
     async def _sync_pending_state(
@@ -239,13 +281,59 @@ class Supervisor:
             prompt=user_prompt,
             system_prompt=system_prompt,
         )
-        parsed = json.loads(response.content)
+        raw_output = response.content
+        next_step = state.step_count + 1
+        try:
+            parsed = self._parse_llm_json(raw_output)
+        except json.JSONDecodeError:
+            log_agent_step(
+                step=next_step,
+                raw_output=raw_output,
+                parsed_action=None,
+                parsed_thought=None,
+            )
+            raise
 
         if not isinstance(parsed, dict):
+            log_agent_step(
+                step=next_step,
+                raw_output=raw_output,
+                parsed_action=None,
+                parsed_thought=None,
+            )
             raise ValueError(f"Gemini response must be a JSON object: {parsed}")
         if "action" not in parsed:
+            log_agent_step(
+                step=next_step,
+                raw_output=raw_output,
+                parsed_action=None,
+                parsed_thought=str(parsed.get("thought", "")),
+            )
             raise ValueError(f"Gemini response thiếu field 'action': {parsed}")
 
+        log_agent_step(
+            step=next_step,
+            raw_output=raw_output,
+            parsed_action=str(parsed.get("action", "")),
+            parsed_thought=str(parsed.get("thought", "")),
+        )
+        return parsed
+
+    @staticmethod
+    def _parse_llm_json(raw_output: str) -> Any:
+        """
+        Gemini lite models sometimes return one valid JSON object followed by
+        stray text. Keep the first object so tool dispatch can continue, but log
+        the trailing payload for diagnosis.
+        """
+        stripped = raw_output.strip()
+        parsed, end_index = json.JSONDecoder().raw_decode(stripped)
+        trailing = stripped[end_index:].strip()
+        if trailing:
+            logger.warning(
+                "LLM JSON had trailing content after first object: %s",
+                trailing[:300],
+            )
         return parsed
 
     @staticmethod

@@ -8,7 +8,12 @@ from fastapi import FastAPI
 from redis.exceptions import AuthenticationError
 
 from src.core.settings import get_settings
-from src.core.setup_logging import setup_logger
+from src.core.setup_logging import (
+    AGENT_TRACE_LOG_FILE,
+    RUN_LOG_FILE,
+    configure_file_logging,
+    setup_logger,
+)
 from src.integrations.qdrant.client import QdrantClientManager
 from src.integrations.qdrant.store import QdrantVectorStore
 from src.rag.embeddings.embedding_client import EmbeddingClient
@@ -33,7 +38,10 @@ logger = setup_logger(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_file_logging(logging.DEBUG if settings.api_debug else logging.INFO)
     logger.info("Starting up RAG service...")
+    logger.info("System log file: %s", RUN_LOG_FILE)
+    logger.info("Agent trace log file: %s", AGENT_TRACE_LOG_FILE)
     redis_client = None
     qdrant_manager = None
     api_service_http_client = None

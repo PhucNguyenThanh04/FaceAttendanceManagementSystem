@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from src.tools.base_tool import BaseTool
 
 
@@ -51,31 +49,53 @@ class ToolRegistry:
 
     def build_tools_prompt(self) -> str:
         """
-        Tạo mô tả tất cả tools cho LLM prompt.
+        Tạo mô tả compact cho LLM prompt.
 
-        Output dạng:
-            Các tool bạn có thể sử dụng:
-
-            1. vector_search: Tìm kiếm thông tin trong tài liệu...
-            2. employee_query: Tra cứu hồ sơ nhân viên hiện tại...
-               input_schema: {...}
-            3. shift_query: Tra cứu ca làm...
+        Không dump toàn bộ JSON schema để tránh model nhỏ sinh nhầm field.
         """
         if not self._tools:
             return "Không có tool nào khả dụng."
 
-        lines = ["Các tool bạn có thể sử dụng:", ""]
-        for index, tool in enumerate(self._tools.values(), start=1):
-            tool_info = tool.to_dict()
-            lines.append(f"{index}. {tool_info['name']}: {tool_info['description']}")
-            input_schema = tool_info.get("input_schema")
-            if input_schema is not None:
-                lines.append(
-                    "   input_schema: "
-                    f"{json.dumps(input_schema, ensure_ascii=False)}"
-                )
+        lines = ["TOOLS:"]
+        for tool in self._tools.values():
+            lines.append(
+                "- "
+                f"{tool.name}: {self._compact_usage(tool)} "
+                f"Input: {self._input_example(tool.name)}"
+            )
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _compact_usage(tool: BaseTool) -> str:
+        usage_by_name = {
+            "employee_query": "Tra cứu hồ sơ nhân viên hiện tại.",
+            "shift_query": "Tra cứu ca làm hoặc lịch làm việc.",
+            "attendance_query": "Tra cứu chấm công, check-in/out, đi trễ/về sớm.",
+            "vector_search": "Tìm nội quy, chính sách, quy định trong tài liệu.",
+            "ask_user": "Hỏi thêm khi thiếu thông tin mà tool không tự lấy được.",
+        }
+        return usage_by_name.get(tool.name, tool.description)
+
+    @staticmethod
+    def _input_example(tool_name: str) -> str:
+        examples = {
+            "employee_query": "{}",
+            "shift_query": '{"as_of":"YYYY-MM-DD"} hoặc {}',
+            "attendance_query": (
+                '{"event_type":"check_in|check_out|unknown",'
+                '"accepted":true,'
+                '"event_time_from":"ISO datetime",'
+                '"event_time_to":"ISO datetime"} hoặc {}'
+            ),
+            "vector_search": '{"query":"câu hỏi ngắn"}',
+            "ask_user": (
+                '{"question":"câu hỏi",'
+                '"options":[],'
+                '"allow_free_text":true}'
+            ),
+        }
+        return examples.get(tool_name, "{}")
 
     def __len__(self) -> int:
         return len(self._tools)

@@ -17,6 +17,8 @@ import { AttendancePage } from '@/features/attendance/pages/AttendancePage'
 import { LeavePage } from '@/features/leave/pages/LeavePage'
 import { CorrectionsPage } from '@/features/corrections/pages/CorrectionsPage'
 import { AuditLogsPage } from '@/features/audit-logs/pages/AuditLogsPage'
+import { ChatboxPage } from '@/features/chatbox/pages/ChatboxPage'
+import { DocumentManagementPage } from '@/features/documents/pages/DocumentManagementPage'
 import { NotificationsPage } from '@/features/notifications/pages/NotificationsPage'
 import { SettingsPage } from '@/features/settings/pages/SettingsPage'
 import type { RoleName } from '@/types/common.types'
@@ -27,6 +29,7 @@ const withRoles = (allowedRoles: RoleName[], element: ReactElement) => (
 
 const adminOnly: RoleName[] = ['admin']
 const adminHr: RoleName[] = ['admin', 'hr']
+const allRoles: RoleName[] = ['admin', 'hr', 'manager', 'employee']
 const staffDashboard: RoleName[] = ['admin', 'hr', 'manager']
 
 export const router = createBrowserRouter([
@@ -57,6 +60,8 @@ export const router = createBrowserRouter([
           { path: routeSegments.corrections, element: withRoles(staffDashboard, <CorrectionsPage />) },
           { path: routeSegments.auditLogs, element: withRoles(adminHr, <AuditLogsPage />) },
           { path: routeSegments.notifications, element: withRoles(staffDashboard, <NotificationsPage />) },
+          { path: routeSegments.documents, element: withRoles(adminOnly, <DocumentManagementPage />) },
+          { path: routeSegments.chatbox, element: withRoles(allRoles, <ChatboxPage />) },
           { path: routeSegments.settings, element: withRoles(adminOnly, <SettingsPage />) },
         ],
       },

@@ -97,7 +97,7 @@ def upgrade() -> None:
     op.create_index(op.f("ix_documents_uploaded_by"), "documents", ["uploaded_by"])
 
     op.create_table(
-        "chat",
+        "conversations",
         sa.Column(
             "id",
             postgresql.UUID(as_uuid=True),
@@ -126,7 +126,11 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_conversations_employee_id"), "chat", ["employee_id"])
+    op.create_index(
+        op.f("ix_conversations_employee_id"),
+        "conversations",
+        ["employee_id"],
+    )
 
     op.create_table(
         "chat_messages",
@@ -150,7 +154,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["conversation_id"],
-            ["chat.id"],
+            ["conversations.id"],
             name="fk_chat_messages_conversation_id_conversations",
             ondelete="CASCADE",
         ),
@@ -174,8 +178,8 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_chat_messages_ask_user"), table_name="chat_messages")
     op.drop_table("chat_messages")
 
-    op.drop_index(op.f("ix_conversations_employee_id"), table_name="chat")
-    op.drop_table("chat")
+    op.drop_index(op.f("ix_conversations_employee_id"), table_name="conversations")
+    op.drop_table("conversations")
 
     op.drop_index(op.f("ix_documents_uploaded_by"), table_name="documents")
     op.drop_index(op.f("ix_documents_status"), table_name="documents")

@@ -12,6 +12,8 @@ export const routeSegments = {
   corrections: 'corrections',
   auditLogs: 'audit-logs',
   notifications: 'notifications',
+  documents: 'documents',
+  chatbox: 'chatbox',
   settings: 'settings',
   forgotPassword: 'forgot-password',
 } as const
@@ -31,6 +33,8 @@ export const routePaths = {
   corrections: `/${routeSegments.corrections}`,
   auditLogs: `/${routeSegments.auditLogs}`,
   notifications: `/${routeSegments.notifications}`,
+  documents: `/${routeSegments.documents}`,
+  chatbox: `/${routeSegments.chatbox}`,
   settings: `/${routeSegments.settings}`,
 } as const
 
@@ -52,6 +56,8 @@ const adminNavigationItems: NavigationItem[] = [
   { label: 'Nghỉ phép', path: routePaths.leave },
   { label: 'Audit logs', path: routePaths.auditLogs },
   { label: 'Thông báo', path: routePaths.notifications },
+  { label: 'Tài liệu RAG', path: routePaths.documents },
+  { label: 'Chatbox', path: routePaths.chatbox },
   { label: 'Cài đặt', path: routePaths.settings },
 ]
 
@@ -68,6 +74,7 @@ const hrNavigationItems: NavigationItem[] = [
   { label: 'Đơn nghỉ phép', path: routePaths.leave },
   { label: 'Audit logs', path: routePaths.auditLogs },
   { label: 'Thông báo', path: routePaths.notifications },
+  { label: 'Chatbox', path: routePaths.chatbox },
 ]
 
 const managerNavigationItems: NavigationItem[] = [
@@ -78,6 +85,11 @@ const managerNavigationItems: NavigationItem[] = [
   { label: 'Duyệt nghỉ phép', path: routePaths.leave },
   { label: 'Xác nhận sửa công', path: routePaths.corrections },
   { label: 'Thông báo', path: routePaths.notifications },
+  { label: 'Chatbox', path: routePaths.chatbox },
+]
+
+const employeeNavigationItems: NavigationItem[] = [
+  { label: 'Chatbox', path: routePaths.chatbox },
 ]
 
 export function getNavigationItemsForRole(role: RoleName | null | undefined): NavigationItem[] {
@@ -91,6 +103,10 @@ export function getNavigationItemsForRole(role: RoleName | null | undefined): Na
 
   if (role === 'manager') {
     return managerNavigationItems
+  }
+
+  if (role === 'employee') {
+    return employeeNavigationItems
   }
 
   return []

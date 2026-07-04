@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Any
 from urllib.parse import quote
 from uuid import uuid4
@@ -32,6 +34,23 @@ class ChatboxClient:
             json=request.model_dump(mode="json"),
         )
         return ChatResponse.model_validate(data)
+
+    async def chat_stream(
+        self,
+        request: ChatRequest,
+    ) -> AsyncGenerator[tuple[str, dict[str, Any]], None]:
+        headers = dict(self._default_headers)
+        headers["Accept"] = "text/event-stream"
+
+        async with self._http.stream(
+            "POST",
+            ChatboxPaths.CHAT_MESSAGE_STREAM,
+            headers=headers,
+            json=request.model_dump(mode="json"),
+        ) as response:
+            response.raise_for_status()
+            async for event, payload in self._iter_sse_events(response.aiter_lines()):
+                yield event, payload
 
     async def ingest_document(
         self,
@@ -168,6 +187,42 @@ class ChatboxClient:
     @staticmethod
     def _escape_multipart_value(value: str) -> str:
         return value.replace("\\", "\\\\").replace('"', '\\"')
+
+    @staticmethod
+    async def _iter_sse_events(
+        lines: AsyncIterator[str],
+    ) -> AsyncGenerator[tuple[str, dict[str, Any]], None]:
+        event = "message"
+        data_lines: list[str] = []
+
+        async for line in lines:
+            if not line:
+                if data_lines:
+                    raw_data = "\n".join(data_lines)
+                    try:
+                        payload = json.loads(raw_data)
+                    except json.JSONDecodeError:
+                        payload = {"text": raw_data}
+                    yield event, payload
+                event = "message"
+                data_lines = []
+                continue
+
+            if line.startswith(":"):
+                continue
+            if line.startswith("event:"):
+                event = line.removeprefix("event:").strip()
+                continue
+            if line.startswith("data:"):
+                data_lines.append(line.removeprefix("data:").lstrip())
+
+        if data_lines:
+            raw_data = "\n".join(data_lines)
+            try:
+                payload = json.loads(raw_data)
+            except json.JSONDecodeError:
+                payload = {"text": raw_data}
+            yield event, payload
 
 
 def get_chatbox_client(http_client: httpx.AsyncClient) -> ChatboxClient:

@@ -46,7 +46,7 @@ export function DocumentUploadForm() {
         title: values.title,
       },
       {
-        onSuccess: () => reset({ allowed_roles: ['admin'], title: '' }),
+        onSuccess: () => reset(),
       },
     )
   }

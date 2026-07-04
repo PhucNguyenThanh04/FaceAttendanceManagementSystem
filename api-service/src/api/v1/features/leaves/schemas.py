@@ -39,6 +39,25 @@ class LeaveTypeRead(LeaveTypeBase):
     updated_at: datetime
 
 
+class LeaveBalanceItem(BaseModel):
+    leave_type_id: int
+    name: str
+    code: str | None = None
+    is_paid: bool
+    max_days_per_year: int | None = None
+    used_days: float
+    remaining_days: float | None = None
+
+
+class LeaveBalanceRead(BaseModel):
+    employee_id: uuid.UUID
+    year: int
+    total_allowed_days: float
+    total_used_days: float
+    total_remaining_days: float
+    items: list[LeaveBalanceItem]
+
+
 class LeaveRequestBase(AppTimezoneModel):
     employee_id: uuid.UUID
     leave_type_id: int = Field(..., ge=1)
@@ -170,3 +189,10 @@ class LeaveRequestListQuery(BaseModel):
         if self.start_from and self.start_to and self.start_to < self.start_from:
             raise ValueError("start_to must be on/after start_from")
         return self
+
+
+class LeaveRequestListResponse(BaseModel):
+    items: list[LeaveRequestRead]
+    total: int
+    page: int
+    page_size: int

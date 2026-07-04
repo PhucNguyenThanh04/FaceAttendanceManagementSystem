@@ -56,7 +56,7 @@ export const router = createBrowserRouter([
           { path: routeSegments.faceProfiles, element: withRoles(adminHr, <FaceProfileListPage />) },
           { path: routeSegments.onboarding, element: withRoles(adminHr, <EmployeeOnboardingPage />) },
           { path: routeSegments.attendance, element: withRoles(staffDashboard, <AttendancePage />) },
-          { path: routeSegments.leave, element: withRoles(staffDashboard, <LeavePage />) },
+          { path: routeSegments.leave, element: withRoles(allRoles, <LeavePage />) },
           { path: routeSegments.corrections, element: withRoles(staffDashboard, <CorrectionsPage />) },
           { path: routeSegments.auditLogs, element: withRoles(adminHr, <AuditLogsPage />) },
           { path: routeSegments.notifications, element: withRoles(staffDashboard, <NotificationsPage />) },

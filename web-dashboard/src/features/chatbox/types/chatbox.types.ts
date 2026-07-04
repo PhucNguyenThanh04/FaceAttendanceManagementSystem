@@ -19,7 +19,10 @@ export type ChatMessage = {
   id: UUID
   options: Array<string | Record<string, unknown>> | null
   role: ChatMessageRole
+  isStreaming?: boolean
+  agent_status?: string
 }
+
 
 export type SendMessagePayload = {
   message: string

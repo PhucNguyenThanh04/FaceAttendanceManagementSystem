@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class ChatboxPaths:
     CHAT_MESSAGE = "/api/v1/chat/message"
+    CHAT_MESSAGE_STREAM = "/api/v1/chat/message/stream"
     DOCUMENTS = "/api/v1/rag/documents"
     DOCUMENT_VECTORS = "/api/v1/rag/documents/{document_id}/vectors"
 

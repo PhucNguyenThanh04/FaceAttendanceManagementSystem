@@ -14,4 +14,8 @@ export const employeeApi = {
     const response = await api.get<Employee>(`/employees/${employeeId}`)
     return response.data
   },
+  getMyEmployeeProfile: async (): Promise<Employee> => {
+    const response = await api.get<Employee>('/employees/me')
+    return response.data
+  },
 }

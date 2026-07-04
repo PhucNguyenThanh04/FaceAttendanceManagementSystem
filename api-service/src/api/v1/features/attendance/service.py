@@ -18,13 +18,18 @@ from src.api.v1.shared.enums import (
 )
 from src.core.configs.settings import settings
 from src.core.dependencies.dep import get_redis_client
-from src.utils.exeptions import DatabaseException, NotFoundException
+from src.utils.exeptions import (
+    AppException,
+    DatabaseException,
+    NotFoundException,
+    ValidationException,
+)
 from src.utils.setup_logger import setup_logger
 
 logger = setup_logger(__name__)
 APP_TZ = ZoneInfo(settings.database_timezone)
 
-COOLDOWN_SECONDS = 600
+COOLDOWN_SECONDS = 1
 REASON_DUPLICATE_ATTENDANCE = "DUPLICATE_ATTENDANCE"
 REASON_ATTENDANCE_ALREADY_COMPLETED = "ATTENDANCE_ALREADY_COMPLETED"
 REASON_EMPLOYEE_INACTIVE = "EMPLOYEE_INACTIVE"
@@ -276,12 +281,21 @@ class AttendanceService:
             await self.attendance_repo.refresh(event)
             await self.attendance_repo.refresh(record)
         except Exception as exc:
-            await self.attendance_repo.rollback()
+            try:
+                await self.attendance_repo.rollback()
+            except Exception:
+                logger.exception(
+                    "Failed to rollback attendance transaction after create event failure: employee_id=%s event_type=%s",
+                    employee_id,
+                    event_type,
+                )
             logger.exception(
                 "Failed to create attendance event: employee_id=%s event_type=%s",
                 employee_id,
                 event_type,
             )
+            if isinstance(exc, DatabaseException):
+                raise
             raise DatabaseException("Failed to create attendance event") from exc
 
         await self.redis.set(
@@ -320,15 +334,123 @@ class AttendanceService:
         self,
         query: schemas.AttendanceEventListQuery,
     ) -> list[schemas.AttendanceEventRead]:
-        events = await self.attendance_repo.list_events(query)
-        return [schemas.AttendanceEventRead.model_validate(event) for event in events]
+        try:
+            events = await self.attendance_repo.list_events(query)
+            return [schemas.AttendanceEventRead.model_validate(event) for event in events]
+        except AppException:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to list attendance events")
+            raise DatabaseException("Failed to list attendance events") from exc
 
     async def get_event(self, event_id: uuid.UUID) -> schemas.AttendanceEventRead:
-        event = await self.attendance_repo.get_event_by_id(event_id)
-        if event is None:
-            logger.warning("Attendance event not found: event_id=%s", event_id)
-            raise NotFoundException("Attendance event")
-        return schemas.AttendanceEventRead.model_validate(event)
+        try:
+            event = await self.attendance_repo.get_event_by_id(event_id)
+            if event is None:
+                logger.warning("Attendance event not found: event_id=%s", event_id)
+                raise NotFoundException("Attendance event")
+            return schemas.AttendanceEventRead.model_validate(event)
+        except AppException:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to get attendance event: event_id=%s", event_id)
+            raise DatabaseException("Failed to get attendance event") from exc
+
+    async def list_record(
+        self,
+        query: schemas.AttendanceRecordListQuery,
+    ) -> list[schemas.AttendanceRecordRead]:
+        try:
+            records = await self.attendance_repo.list_record(query)
+            return [schemas.AttendanceRecordRead.model_validate(record) for record in records]
+        except AppException:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to list attendance records")
+            raise DatabaseException("Failed to list attendance records") from exc
+
+    async def get_record(self, record_id: uuid.UUID) -> schemas.AttendanceRecordRead:
+        try:
+            record = await self.attendance_repo.get_record_by_id(record_id)
+            if record is None:
+                logger.warning("Attendance record not found: record_id=%s", record_id)
+                raise NotFoundException("Attendance record")
+            return schemas.AttendanceRecordRead.model_validate(record)
+        except AppException:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to get attendance record: record_id=%s", record_id)
+            raise DatabaseException("Failed to get attendance record") from exc
+
+    async def summarize_records(
+        self,
+        query: schemas.AttendanceRecordSummaryQuery,
+    ) -> schemas.AttendanceRecordSummaryRead:
+        try:
+            summary = await self.attendance_repo.summarize_records(query)
+            return schemas.AttendanceRecordSummaryRead(**summary)
+        except AppException:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to summarize attendance records")
+            raise DatabaseException("Failed to summarize attendance records") from exc
+
+    @staticmethod
+    def _validate_record_update(
+        record: AttendanceRecord,
+        payload: schemas.AttendanceRecordUpdate,
+    ) -> None:
+        required_fields = {
+            "work_date",
+            "status",
+            "late_minutes",
+            "early_leave_minutes",
+            "worked_minutes",
+            "source",
+        }
+        null_required_fields = [
+            field
+            for field in required_fields
+            if field in payload.model_fields_set and getattr(payload, field) is None
+        ]
+        if null_required_fields:
+            raise ValidationException(
+                f"{', '.join(sorted(null_required_fields))} cannot be null"
+            )
+
+        check_in_time = (
+            payload.check_in_time
+            if "check_in_time" in payload.model_fields_set
+            else record.check_in_time
+        )
+        check_out_time = (
+            payload.check_out_time
+            if "check_out_time" in payload.model_fields_set
+            else record.check_out_time
+        )
+        if check_in_time and check_out_time and check_out_time < check_in_time:
+            raise ValidationException("check_out_time must be on/after check_in_time")
+
+    async def update_record(
+        self,
+        record_id: uuid.UUID,
+        payload: schemas.AttendanceRecordUpdate,
+    ) -> schemas.AttendanceRecordRead:
+        try:
+            record = await self.attendance_repo.get_record_by_id(record_id)
+            if record is None:
+                logger.warning("Attendance record not found for update: record_id=%s", record_id)
+                raise NotFoundException("Attendance record")
+
+            self._validate_record_update(record, payload)
+            updated = await self.attendance_repo.update_record(record, payload)
+            logger.info("Attendance record updated: record_id=%s", record_id)
+            return schemas.AttendanceRecordRead.model_validate(updated)
+        except AppException:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to update attendance record: record_id=%s", record_id)
+            raise DatabaseException("Failed to update attendance record") from exc
 
 
 def get_attendance_service(

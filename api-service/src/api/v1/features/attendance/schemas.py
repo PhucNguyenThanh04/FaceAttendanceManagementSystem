@@ -138,6 +138,26 @@ class AttendanceRecordListQuery(BaseModel):
         return self
 
 
+class AttendanceRecordSummaryQuery(BaseModel):
+    employee_id: uuid.UUID | None = None
+    shift_id: int | None = Field(default=None, ge=1)
+    work_date_from: date | None = None
+    work_date_to: date | None = None
+
+    @model_validator(mode="after")
+    def validate_date_window(self) -> "AttendanceRecordSummaryQuery":
+        if self.work_date_from and self.work_date_to and self.work_date_to < self.work_date_from:
+            raise ValueError("work_date_to must be on/after work_date_from")
+        return self
+
+
+class AttendanceRecordSummaryRead(BaseModel):
+    total_records: int
+    present_days: int
+    late_days: int
+    absent_days: int
+
+
 class AttendanceEventListQuery(BaseModel):
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=200)

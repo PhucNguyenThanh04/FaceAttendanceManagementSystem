@@ -9,3 +9,11 @@ export function useEmployees(params: EmployeeListParams, enabled = true) {
     queryKey: ['employees', params],
   })
 }
+
+export function useMyEmployeeProfile(enabled = true) {
+  return useQuery({
+    enabled,
+    queryFn: () => employeeApi.getMyEmployeeProfile(),
+    queryKey: ['my-employee-profile'],
+  })
+}

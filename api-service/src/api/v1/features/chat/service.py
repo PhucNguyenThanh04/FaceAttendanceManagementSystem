@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import AsyncGenerator
+from typing import Any
 
 import httpx
 from fastapi import Depends
@@ -188,6 +190,139 @@ class ConversationService:
             error_code=rag_response.error_code,
         )
 
+    async def send_message_stream(
+        self,
+        *,
+        conversation_id: uuid.UUID,
+        payload: schemas.SendMessageRequest,
+        current_employee: Employee,
+        current_user: User,
+    ) -> AsyncGenerator[str, None]:
+        conversation = await self.conversation_repository.get_conversation_for_employee(
+            conversation_id=conversation_id,
+            employee_id=current_employee.employee_id,
+        )
+        chat_history = await self._get_short_term_history(conversation_id)
+        request = ChatRequest(
+            message=payload.message,
+            employee_id=str(current_employee.employee_id),
+            user_role=current_user.role_name.value,
+            conversation_id=str(conversation_id),
+            chat_history=chat_history,
+        )
+
+        async def event_stream() -> AsyncGenerator[str, None]:
+            answer_parts: list[str] = []
+            latest_final: dict[str, Any] | None = None
+
+            try:
+                async for event, event_payload in self.chatbox_client.chat_stream(request):
+                    if event == "delta":
+                        text = str(event_payload.get("text") or "")
+                        if text:
+                            answer_parts.append(text)
+                        yield _format_sse(event, event_payload)
+                        continue
+
+                    if event == "status":
+                        yield _format_sse(event, event_payload)
+                        continue
+
+                    if event == "error":
+                        yield _format_sse(event, event_payload)
+                        return
+
+                    if event != "final":
+                        continue
+
+                    latest_final = dict(event_payload)
+                    answer = "".join(answer_parts).strip()
+                    if not answer:
+                        answer = str(latest_final.get("answer") or "").strip()
+                    if not answer:
+                        yield _format_sse(
+                            "error",
+                            {
+                                "error_code": "EMPTY_STREAM_ANSWER",
+                                "message": "Chatbot không trả nội dung để lưu.",
+                            },
+                        )
+                        return
+
+                    citations = list(latest_final.get("citations") or [])
+                    ask_user = bool(latest_final.get("ask_user", False))
+                    options = list(latest_final.get("options") or [])
+
+                    user_message, assistant_message = (
+                        await self.conversation_repository.create_chat_exchange(
+                            conversation_id=conversation_id,
+                            user_content=payload.message,
+                            assistant_content=answer,
+                            citations=citations,
+                            ask_user=ask_user,
+                            options=options,
+                            title_if_empty=(
+                                self._title_from_message(payload.message)
+                                if conversation.title == DEFAULT_CONVERSATION_TITLE
+                                else None
+                            ),
+                            replace_title=DEFAULT_CONVERSATION_TITLE,
+                        )
+                    )
+                    await self._append_short_term_history_safely(
+                        conversation_id=conversation_id,
+                        user_content=payload.message,
+                        assistant_content=answer,
+                    )
+
+                    latest_final["answer"] = answer
+                    latest_final["citations"] = citations
+                    latest_final["ask_user"] = ask_user
+                    latest_final["options"] = options
+                    latest_final["user_message"] = self._message_to_read(
+                        user_message
+                    ).model_dump(mode="json")
+                    latest_final["assistant_message"] = self._message_to_read(
+                        assistant_message
+                    ).model_dump(mode="json")
+                    yield _format_sse("final", latest_final)
+                    return
+
+                if latest_final is None:
+                    yield _format_sse(
+                        "error",
+                        {
+                            "error_code": "STREAM_ENDED_WITHOUT_FINAL",
+                            "message": "Chatbot kết thúc stream nhưng chưa gửi kết quả cuối.",
+                        },
+                    )
+            except httpx.HTTPError as exc:
+                logger.exception(
+                    "RAG chat stream HTTP error: conversation_id=%s",
+                    conversation_id,
+                )
+                yield _format_sse(
+                    "error",
+                    {
+                        "error_code": "RAG_STREAM_ERROR",
+                        "message": str(exc),
+                    },
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Unhandled chat stream error: conversation_id=%s",
+                    conversation_id,
+                )
+                yield _format_sse(
+                    "error",
+                    {
+                        "error_code": "CHAT_STREAM_ERROR",
+                        "message": str(exc),
+                    },
+                )
+
+        return event_stream()
+
     async def send_new_message(
         self,
         *,
@@ -328,6 +463,11 @@ class ConversationService:
         )
         await self.redis.ltrim(key, -CHAT_HISTORY_WINDOW_MESSAGES, -1)
         await self.redis.expire(key, CHAT_HISTORY_TTL_SECONDS)
+
+
+def _format_sse(event: str, payload: dict[str, Any]) -> str:
+    data = json.dumps(payload, ensure_ascii=False, default=str)
+    return f"event: {event}\ndata: {data}\n\n"
 
 
 def get_conversation_service(

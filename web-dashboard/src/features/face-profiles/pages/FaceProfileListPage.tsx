@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Loading } from '@/components/ui/Loading'
@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/Select'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { FaceProfileTable } from '@/features/face-profiles/components/FaceProfileTable'
 import { useFaceProfiles } from '@/features/face-profiles/hooks/useFaceProfiles'
+import { useEmployees } from '@/features/employees/hooks/useEmployees'
 import { getApiErrorMessage } from '@/lib/utils'
 import type { FaceProfileStatus } from '@/types/common.types'
 
@@ -21,6 +22,13 @@ export function FaceProfileListPage() {
     status: status || undefined,
   })
   const profiles = profilesQuery.data?.items ?? []
+
+  const employeesQuery = useEmployees({ page: 1, page_size: 200 })
+  const employees = employeesQuery.data?.items
+  const employeeNames = useMemo(
+    () => new Map((employees ?? []).map((emp) => [emp.employee_id, emp.full_name])),
+    [employees],
+  )
 
   return (
     <section className="page-stack">
@@ -45,10 +53,13 @@ export function FaceProfileListPage() {
           <option value="failed">Failed</option>
         </Select>
       </div>
-      {profilesQuery.isLoading ? <Loading /> : null}
-      {profilesQuery.isError ? (
+      {profilesQuery.isLoading || employeesQuery.isLoading ? <Loading /> : null}
+      {profilesQuery.isError || employeesQuery.isError ? (
         <StatusMessage tone="error">
-          {getApiErrorMessage(profilesQuery.error, 'Không thể tải danh sách face profiles.')}
+          {getApiErrorMessage(
+            profilesQuery.error || employeesQuery.error,
+            'Không thể tải danh sách face profiles.'
+          )}
         </StatusMessage>
       ) : null}
       {!profilesQuery.isLoading && !profilesQuery.isError && profiles.length === 0 ? (
@@ -59,7 +70,7 @@ export function FaceProfileListPage() {
       ) : null}
       {profiles.length > 0 ? (
         <>
-          <FaceProfileTable profiles={profiles} />
+          <FaceProfileTable employeeNames={employeeNames} profiles={profiles} />
           <Pagination
             currentPage={profilesQuery.data?.page ?? page}
             isFetching={profilesQuery.isFetching}

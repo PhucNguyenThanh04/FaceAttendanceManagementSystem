@@ -48,6 +48,10 @@ class LLMBlockedError(LLMError):
     """Provider không trả nội dung usable."""
 
 
+class LLMTruncatedError(LLMError):
+    """Output bị cắt vì vượt max_output_tokens."""
+
+
 class GeminiClient:
 
     JSON_MIME_TYPE = "application/json"
@@ -162,10 +166,11 @@ class GeminiClient:
                 ),
                 timeout=self.timeout,
             )
+            stream_iter = iter(stream)
 
             def next_chunk() -> Any:
                 try:
-                    return next(stream)
+                    return next(stream_iter)
                 except StopIteration:
                     return stream_done
 
@@ -209,6 +214,16 @@ class GeminiClient:
             )
             duration_ms = (time.perf_counter() - start) * 1000
             usage = getattr(response, "usage_metadata", None)
+
+            # Kiểm tra finish_reason — phát hiện output bị cắt
+            finish_reason = self._get_finish_reason(response)
+            if finish_reason == "MAX_TOKENS":
+                text = self._extract_response_text(response, allow_empty=True)
+                raise LLMTruncatedError(
+                    f"Gemini output bị cắt do vượt max_output_tokens. "
+                    f"finish_reason={finish_reason}, "
+                    f"output_preview={text[:200]!r}"
+                )
 
             return LLMResponse(
                 content=self._extract_response_text(response),
@@ -259,6 +274,16 @@ class GeminiClient:
                 raise
             config.pop("response_mime_type", None)
             return genai.types.GenerationConfig(**config)
+
+    @staticmethod
+    def _get_finish_reason(response: Any) -> str | None:
+        """Trích xuất finish_reason từ Gemini response."""
+        for candidate in getattr(response, "candidates", []) or []:
+            reason = getattr(candidate, "finish_reason", None)
+            if reason is not None:
+                # finish_reason có thể là enum hoặc string tùy SDK version
+                return str(reason).replace("FinishReason.", "").upper()
+        return None
 
     @staticmethod
     def _extract_response_text(response: Any, *, allow_empty: bool = False) -> str:

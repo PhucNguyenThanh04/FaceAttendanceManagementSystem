@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 from src.integrations.api_service.schemas import (
-    AttendanceEventListQuery,
-    AttendanceEventRead,
+    AttendanceRecordListQuery,
+    AttendanceRecordRead,
     CurrentShiftRead,
     EmployeeRead,
 )
+from src.utils.enums import AttendanceRecordStatus
+
+
+def _format_time(value) -> str:
+    if value is None:
+        return "-"
+    return value.strftime("%H:%M:%S")
 
 
 def format_employee(employee: EmployeeRead) -> str:
@@ -46,38 +53,55 @@ def format_current_shift(current_shift: CurrentShiftRead) -> str:
     )
 
 
-def format_attendance_events(
-    events: list[AttendanceEventRead],
-    query: AttendanceEventListQuery,
+def format_attendance_records(
+    records: list[AttendanceRecordRead],
+    query: AttendanceRecordListQuery,
 ) -> str:
-    if not events:
-        return "Không tìm thấy attendance event phù hợp với bộ lọc."
+    if not records:
+        return "Không tìm thấy attendance record phù hợp với bộ lọc."
 
     lines = [
-        "Danh sách attendance event:",
-        f"- page: {query.page}",
-        f"- page_size: {query.page_size}",
-        f"- returned: {len(events)}",
+        "attendance_records chính thức từ sổ công. Chỉ dùng số liệu bên dưới, không suy diễn.",
+        f"page={query.page}; page_size={query.page_size}; returned={len(records)}",
     ]
 
-    max_events_to_show = 30
-    for index, event in enumerate(events[:max_events_to_show], start=1):
-        accepted = "accepted" if event.is_accepted else "rejected"
-        lines.extend(
-            [
-                "",
-                f"[{index}] event_id: {event.event_id}",
-                f"- employee_id: {event.employee_id}",
-                f"- event_type: {event.event_type.value}",
-                f"- event_time: {event.event_time}",
-                f"- status: {accepted}",
-                f"- rejection_reason: {event.rejection_reason}",
-            ]
-        )
+    max_records_to_show = 30
+    visible_records = records[:max_records_to_show]
+    status_value = query.status.value if query.status is not None else None
 
-    if len(events) > max_events_to_show:
+    if status_value in {
+        AttendanceRecordStatus.late.value,
+        AttendanceRecordStatus.late_and_early_leave.value,
+    }:
+        lines.append("fields: index|work_date|late_minutes|check_in_time")
+        for index, record in enumerate(visible_records, start=1):
+            lines.append(
+                f"{index}|{record.work_date}|late={record.late_minutes}|"
+                f"in={_format_time(record.check_in_time)}"
+            )
+    elif status_value == AttendanceRecordStatus.early_leave.value:
+        lines.append("fields: index|work_date|early_leave_minutes|check_out_time")
+        for index, record in enumerate(visible_records, start=1):
+            lines.append(
+                f"{index}|{record.work_date}|early={record.early_leave_minutes}|"
+                f"out={_format_time(record.check_out_time)}"
+            )
+    else:
         lines.append(
-            f"\nCòn {len(events) - max_events_to_show} event chưa hiển thị. "
+            "fields: index|work_date|status|check_in|check_out|late|early|worked"
+        )
+        for index, record in enumerate(visible_records, start=1):
+            lines.append(
+                f"{index}|{record.work_date}|{record.status.value}|"
+                f"in={_format_time(record.check_in_time)}|"
+                f"out={_format_time(record.check_out_time)}|"
+                f"late={record.late_minutes}|early={record.early_leave_minutes}|"
+                f"worked={record.worked_minutes}"
+            )
+
+    if len(records) > max_records_to_show:
+        lines.append(
+            f"Còn {len(records) - max_records_to_show} record chưa hiển thị. "
             f"Dùng page={query.page + 1} để xem thêm."
         )
 

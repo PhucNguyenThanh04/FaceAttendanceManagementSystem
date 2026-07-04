@@ -13,7 +13,6 @@ import { useConversations } from '@/features/chatbox/hooks/useConversations'
 import { useCreateConversation } from '@/features/chatbox/hooks/useCreateConversation'
 import { useDeleteConversation } from '@/features/chatbox/hooks/useDeleteConversation'
 import { useSendMessage } from '@/features/chatbox/hooks/useSendMessage'
-import { useSendNewMessage } from '@/features/chatbox/hooks/useSendNewMessage'
 import type { Conversation } from '@/features/chatbox/types/chatbox.types'
 import { getApiErrorMessage } from '@/lib/utils'
 
@@ -26,7 +25,6 @@ export function ChatboxPage() {
   const createConversation = useCreateConversation()
   const deleteConversation = useDeleteConversation()
   const sendMessage = useSendMessage()
-  const sendNewMessage = useSendNewMessage()
   const conversations = conversationsQuery.data ?? EMPTY_CONVERSATIONS
   const pendingCreatedConversation =
     createConversation.data?.id === selectedConversationId ? createConversation.data : null
@@ -65,30 +63,33 @@ export function ChatboxPage() {
     })
   }
 
-  const handleSend = (message: string) => {
-    if (activeConversationId) {
-      sendMessage.mutate({
-        conversationId: activeConversationId,
-        payload: { message },
-      })
-      return
+  const handleSend = async (message: string) => {
+    let conversationId = activeConversationId
+
+    if (!conversationId) {
+      try {
+        const conversation = await createConversation.mutateAsync(undefined)
+        conversationId = conversation.id
+        setSelectedConversationId(conversation.id)
+      } catch (err) {
+        console.error('Không thể tạo hội thoại mới:', err)
+        return
+      }
     }
 
-    sendNewMessage.mutate(
-      { message },
-      {
-        onSuccess: (response) => setSelectedConversationId(response.conversation.id),
-      },
-    )
+    sendMessage.mutate({
+      conversationId,
+      payload: { message },
+    })
   }
 
   const handleUseFreeText = () => {
     document.getElementById('chat-message-input')?.focus()
   }
 
-  const activeError = sendMessage.error ?? sendNewMessage.error
-  const isSending = sendMessage.isPending || sendNewMessage.isPending
-  const isSendError = sendMessage.isError || sendNewMessage.isError
+  const activeError = sendMessage.error
+  const isSending = sendMessage.isPending || createConversation.isPending
+  const isSendError = sendMessage.isError
 
   return (
     <section className="chatbox-page">

@@ -14,4 +14,9 @@ export const faceProfileApi = {
     const response = await api.get<FaceProfile>(`/face-profiles/employee/${employeeId}`)
     return response.data
   },
+  revokeFaceProfile: async (profileId: string, reason: string): Promise<FaceProfile> => {
+    const response = await api.post<FaceProfile>(`/face-profiles/${profileId}/revoke`, { reason })
+    return response.data
+  },
 }
+

@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Body, Depends, Response, status
+from fastapi.responses import StreamingResponse
 
 from src.api.v1.features.chat import schemas
 from src.api.v1.features.chat.service import (
@@ -101,4 +102,28 @@ async def send_message(
         payload=payload,
         current_employee=current_employee,
         current_user=current_user,
+    )
+
+
+@router.post("/{conversation_id}/messages/stream")
+async def send_message_stream(
+    conversation_id: uuid.UUID,
+    payload: schemas.SendMessageRequest,
+    current_employee: Employee = Depends(get_current_employee),
+    current_user: User = Depends(get_current_user),
+    service: ConversationService = Depends(get_conversation_service),
+) -> StreamingResponse:
+    stream = await service.send_message_stream(
+        conversation_id=conversation_id,
+        payload=payload,
+        current_employee=current_employee,
+        current_user=current_user,
+    )
+    return StreamingResponse(
+        stream,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )

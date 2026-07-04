@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { AccessDeniedPanel } from '@/components/layout/AccessDeniedPanel'
 import { Loading } from '@/components/ui/Loading'
 import { StatusMessage } from '@/components/ui/StatusMessage'
@@ -53,6 +53,10 @@ export function DashboardPage() {
   const employees = employeesQuery.data?.items ?? []
   const departmentNames = new Map((departmentsQuery.data ?? []).map((department) => [department.department_id, department.name]))
   const positionNames = new Map((positionsQuery.data ?? []).map((position) => [position.position_id, position.name]))
+
+  if (role === 'employee') {
+    return <Navigate to={routePaths.chatbox} replace />
+  }
 
   if (!canAccessDashboard || !dashboardCopy) {
     return <AccessDeniedPanel />

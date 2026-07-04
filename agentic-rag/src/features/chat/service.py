@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncGenerator
+from typing import Any
+
 from fastapi import Depends
 from redis.asyncio import Redis
 
@@ -44,12 +48,27 @@ class ChatService:
         state = await self.supervisor.run(request, registry)
         return self._to_chat_response(state)
 
+    async def chat_stream(
+        self,
+        request: ChatRequest,
+    ) -> AsyncGenerator[str, None]:
+        registry = self._build_registry(request)
+        async for event, payload in self.supervisor.stream(request, registry):
+            if event == "_final_state":
+                state = payload["state"]
+                response = self._to_chat_response(state)
+                yield _format_sse("final", response.model_dump(mode="json"))
+                continue
+
+            yield _format_sse(event, payload)
+
     def _build_registry(self, request: ChatRequest) -> ToolRegistry:
         registry = ToolRegistry()
         registry.register(
             VectorSearchTool(
                 retrieval_pipeline=self.retrieval_pipeline,
                 allowed_role=request.user_role,
+                original_query=request.message,
             )
         )
         registry.register(
@@ -139,6 +158,11 @@ def _collect_citations(state: AgentState) -> list[ChatCitation]:
             )
 
     return citations
+
+
+def _format_sse(event: str, payload: dict[str, Any]) -> str:
+    data = json.dumps(payload, ensure_ascii=False)
+    return f"event: {event}\ndata: {data}\n\n"
 
 
 def get_chat_service(

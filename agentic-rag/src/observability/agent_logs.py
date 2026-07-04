@@ -57,14 +57,23 @@ def log_agent_tool_result(
 def log_agent_finish(
     conversation_id: str,
     total_steps: int,
+    steps_this_request: int,
     finish_reason: str,
     used_tools: list[str],
     answer_preview: str,
+    elapsed_seconds: float | None = None,
 ):
+    elapsed_part = (
+        f" elapsed_seconds={elapsed_seconds:.3f}"
+        if elapsed_seconds is not None
+        else ""
+    )
     logger.info(
         f"[FINISH] conv={conversation_id[:8]} "
-        f"steps={total_steps} "
+        f"steps_this_request={steps_this_request} "
+        f"total_steps={total_steps} "
         f"reason={finish_reason} "
         f"tools={used_tools} "
         f"answer='{answer_preview[:80]}'"
+        f"{elapsed_part}"
     )

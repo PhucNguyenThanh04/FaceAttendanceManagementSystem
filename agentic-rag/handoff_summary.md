@@ -66,7 +66,7 @@ Internal:
 - `LegalStructureAwareChunker.chunk(...) -> list[DocumentChunk]`
 - `DocumentIndexer.index_chunks(...) -> int`
 - `RetrievalPipeline.retrieve_context(...) -> RetrievalPipelineResult`
-- `APIServiceClient.get_employee/get_employee_current_shift/list_attendance_events`
+- `APIServiceClient.get_employee/get_employee_current_shift/list_attendance_records`
 - Tool names: `vector_search`, `database_query`, `ask_user`
 
 ## 5. Decisions made

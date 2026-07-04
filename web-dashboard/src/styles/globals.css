@@ -789,7 +789,17 @@ p {
 }
 
 .chatbox-page {
-  min-height: calc(100vh - 144px);
+  height: calc(100vh - 144px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chatbox-page > .page-stack {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .chat-shell {
@@ -798,7 +808,8 @@ p {
   border-radius: var(--radius);
   display: grid;
   grid-template-columns: 340px minmax(0, 1fr);
-  min-height: calc(100vh - 220px);
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -809,6 +820,7 @@ p {
   gap: 14px;
   min-width: 0;
   padding: 16px;
+  overflow: hidden;
 }
 
 .chat-sidebar h2,
@@ -822,6 +834,8 @@ p {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -871,6 +885,8 @@ p {
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   padding: 16px;
+  height: 100%;
+  min-height: 0;
 }
 
 .chat-main__header {
@@ -1317,3 +1333,57 @@ p {
     flex-direction: column;
   }
 }
+
+/* Agent thinking and streaming status styles */
+.agent-thinking-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-bg);
+  border: 1px dashed var(--accent-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--accent);
+  margin-top: 4px;
+  margin-bottom: 4px;
+  animation: pulse-border 2s infinite ease-in-out;
+  align-self: flex-start;
+  box-sizing: border-box;
+}
+
+.agent-thinking-status--inline {
+  margin-top: 10px;
+  background: rgba(170, 59, 255, 0.05);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.thinking-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: rgba(170, 59, 255, 0.2); }
+  50% { border-color: rgba(170, 59, 255, 0.7); }
+}
+
+/* Typewriter cursor for streaming messages */
+.streaming-cursor::after {
+  content: '▋';
+  color: var(--accent);
+  animation: blink 1s infinite steps(1);
+  margin-left: 2px;
+  font-weight: bold;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+

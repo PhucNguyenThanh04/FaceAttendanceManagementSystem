@@ -101,11 +101,11 @@ export function AssignShiftForm({
   const [values, setValues] = useState<AssignShiftValues>(() =>
     getDefaultValues(selectedEmployeeId, shifts, selectedAssignment),
   )
+
   const createAssignment = useCreateShiftAssignment()
   const updateAssignment = useUpdateShiftAssignment(values.employee_id)
   const currentShiftQuery = useCurrentShift(values.employee_id, undefined, Boolean(values.employee_id))
   const showCurrentShiftWarning = !isEditing && Boolean(currentShiftQuery.data)
-
   const shiftOptions = useMemo(
     () => shifts.filter((shift) => shift.is_active),
     [shifts],

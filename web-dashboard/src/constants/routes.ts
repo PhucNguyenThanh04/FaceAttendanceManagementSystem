@@ -89,6 +89,7 @@ const managerNavigationItems: NavigationItem[] = [
 ]
 
 const employeeNavigationItems: NavigationItem[] = [
+  { label: 'Nghỉ phép', path: routePaths.leave },
   { label: 'Chatbox', path: routePaths.chatbox },
 ]
 

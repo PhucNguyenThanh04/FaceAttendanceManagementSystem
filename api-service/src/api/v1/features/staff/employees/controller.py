@@ -8,9 +8,17 @@ from src.api.v1.features.staff.employees import schemas
 from src.api.v1.features.staff.employees.service import EmployeeService, get_employee_service
 from src.api.v1.features.users.models import User
 from src.api.v1.shared.enums import RoleName
-from src.core.dependencies.auth import require_roles, get_current_user_or_rag_api_key
+from src.api.v1.features.staff.models import Employee
+from src.core.dependencies.auth import require_roles, get_current_user_or_rag_api_key, get_current_employee
 
 router = APIRouter(prefix="/employees", tags=["Staff-Employees"])
+
+
+@router.get("/me", response_model=schemas.EmployeeRead)
+async def get_my_employee_profile(
+    current_employee: Employee = Depends(get_current_employee),
+) -> schemas.EmployeeRead:
+    return current_employee
 
 
 @router.get("/code/{employee_code}", response_model=schemas.EmployeeRead)

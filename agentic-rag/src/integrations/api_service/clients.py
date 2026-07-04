@@ -7,8 +7,8 @@ import httpx
 
 from src.integrations.api_service.schemas import (
     APIServerPaths,
-    AttendanceEventListQuery,
-    AttendanceEventRead,
+    AttendanceRecordListQuery,
+    AttendanceRecordRead,
     CurrentShiftRead,
     EmployeeRead,
 )
@@ -46,17 +46,17 @@ class APIServiceClient:
         )
         return CurrentShiftRead.model_validate(data)
 
-    async def list_attendance_events(
+    async def list_attendance_records(
         self,
-        query: AttendanceEventListQuery | None = None,
-    ) -> list[AttendanceEventRead]:
-        query = query or AttendanceEventListQuery()
+        query: AttendanceRecordListQuery | None = None,
+    ) -> list[AttendanceRecordRead]:
+        query = query or AttendanceRecordListQuery()
         data = await self._request_json(
             method="GET",
-            path=APIServerPaths.ATTENDANCE_EVENTS,
+            path=APIServerPaths.ATTENDANCE_RECORDS,
             params=query.model_dump(mode="json", exclude_none=True),
         )
-        return [AttendanceEventRead.model_validate(item) for item in data]
+        return [AttendanceRecordRead.model_validate(item) for item in data]
 
     async def _request_json(
         self,

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import type { ChatMessage } from '@/features/chatbox/types/chatbox.types'
 import { cx, formatDateTime } from '@/lib/utils'
@@ -66,6 +67,12 @@ function getCitationIndex(citation: Record<string, unknown>, index: number): num
 }
 
 export function ChatMessageList({ messages, onSendOption }: ChatMessageListProps) {
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
   return (
     <div className="chat-thread">
       {messages.map((message) => (
@@ -76,7 +83,25 @@ export function ChatMessageList({ messages, onSendOption }: ChatMessageListProps
             </Badge>
             <span>{formatDateTime(message.created_at)}</span>
           </div>
-          <p>{message.content}</p>
+          
+          {message.content ? (
+            <p className={cx(message.isStreaming && 'streaming-cursor')}>{message.content}</p>
+          ) : (
+            message.isStreaming && (
+              <div className="agent-thinking-status">
+                <span className="thinking-spinner"></span>
+                <span>{message.agent_status || 'Đang chuẩn bị...'}</span>
+              </div>
+            )
+          )}
+
+          {message.isStreaming && message.content && message.agent_status ? (
+            <div className="agent-thinking-status agent-thinking-status--inline">
+              <span className="thinking-spinner"></span>
+              <span>{message.agent_status}</span>
+            </div>
+          ) : null}
+
           {message.citations?.length ? (
             <div className="citation-list">
               <span className="citation-list__title">Nguồn tham khảo</span>
@@ -110,6 +135,7 @@ export function ChatMessageList({ messages, onSendOption }: ChatMessageListProps
           ) : null}
         </article>
       ))}
+      <div ref={bottomRef} />
     </div>
   )
 }

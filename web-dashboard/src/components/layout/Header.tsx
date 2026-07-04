@@ -20,7 +20,7 @@ export function Header() {
     <header className="header">
       <div>
         <p className="eyebrow">Dashboard</p>
-        <h1>Quản lý chấm công khuôn mặt</h1>
+        <h1>Agentic RAG</h1>
       </div>
       <div className="header__account">
         <div className="avatar" aria-hidden="true">

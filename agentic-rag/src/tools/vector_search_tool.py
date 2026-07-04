@@ -25,17 +25,22 @@ class VectorSearchTool(BaseTool):
         "Tìm kiếm thông tin trong tài liệu nội bộ bằng vector/RAG search. "
         "Dùng khi cần tra cứu chính sách, nội quy, quy trình hoặc tài liệu đã index."
     )
-    usage_hint = "Tìm nội quy, chính sách, quy định trong tài liệu."
-    input_example = '{"query":"câu hỏi ngắn"}'
+    usage_hint = (
+        "Tìm nội quy, chính sách, quy định trong tài liệu. "
+        "Giữ nguyên các cụm từ quan trọng trong câu hỏi gốc; không rút gọn quá mức."
+    )
+    input_example = '{"query":"câu hỏi đầy đủ, giữ cụm từ chính của người dùng"}'
     args_schema = VectorSearchInput
 
     def __init__(
         self,
         retrieval_pipeline: RetrievalPipeline,
         allowed_role: str,
+        original_query: str | None = None,
     ) -> None:
         self.retrieval_pipeline = retrieval_pipeline
         self.allowed_role = allowed_role
+        self.original_query = (original_query or "").strip()
 
     async def run(self, query: str) -> ToolResult:
         query = query.strip()
@@ -44,10 +49,7 @@ class VectorSearchTool(BaseTool):
                 observation="Không có truy vấn để tìm kiếm trong tài liệu nội bộ."
             )
 
-        result = await self.retrieval_pipeline.retrieve_context(
-            query=query,
-            allowed_role=self.allowed_role,
-        )
+        result = await self._retrieve_best_context(query)
 
         if not result.used_context or not result.chunks:
             return ToolResult(
@@ -76,6 +78,39 @@ class VectorSearchTool(BaseTool):
             low_confidence=result.low_confidence,
             metadata={"tool": self.name},
         )
+
+    async def _retrieve_best_context(self, query: str) -> RetrievalPipelineResult:
+        candidate_queries = [query]
+        if self.original_query and self.original_query.casefold() != query.casefold():
+            candidate_queries.append(self.original_query)
+
+        best_result: RetrievalPipelineResult | None = None
+        for candidate_query in candidate_queries:
+            result = await self.retrieval_pipeline.retrieve_context(
+                query=candidate_query,
+                allowed_role=self.allowed_role,
+            )
+            if not result.used_context:
+                if best_result is None:
+                    best_result = result
+                continue
+
+            if best_result is None or self._best_score(result) > self._best_score(best_result):
+                best_result = result
+
+        return best_result or RetrievalPipelineResult(
+            chunks=[],
+            citations=[],
+            token_count=0,
+            low_confidence=False,
+            used_context=False,
+        )
+
+    @staticmethod
+    def _best_score(result: RetrievalPipelineResult) -> float:
+        if not result.citations:
+            return 0.0
+        return max(citation.score for citation in result.citations)
 
     def _format_result(self, result: RetrievalPipelineResult) -> str:
         citation_by_index = {

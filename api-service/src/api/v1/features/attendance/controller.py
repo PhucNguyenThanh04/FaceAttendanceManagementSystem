@@ -13,9 +13,9 @@ from src.api.v1.features.attendance.service import (
 from src.api.v1.features.users.models import User
 from src.api.v1.shared.enums import RoleName
 from src.core.dependencies.auth import (
-require_roles, 
-verify_api_key_attendance, 
-get_current_user_or_rag_api_key
+    get_current_user_or_rag_api_key,
+    require_roles,
+    verify_api_key_attendance,
 )
 
 router = APIRouter(prefix="/attendance", tags=["Attendance"])
@@ -49,3 +49,40 @@ async def get_attendance_event(
     _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
 ) -> schemas.AttendanceEventRead:
     return await service.get_event(event_id)
+
+
+@router.get("/records", response_model=list[schemas.AttendanceRecordRead])
+async def list_attendance_records(
+    query: schemas.AttendanceRecordListQuery = Depends(),
+    service: AttendanceService = Depends(get_attendance_read_service),
+    _: User = Depends(get_current_user_or_rag_api_key),
+) -> list[schemas.AttendanceRecordRead]:
+    return await service.list_record(query)
+
+
+@router.get("/records/summary", response_model=schemas.AttendanceRecordSummaryRead)
+async def summarize_attendance_records(
+    query: schemas.AttendanceRecordSummaryQuery = Depends(),
+    service: AttendanceService = Depends(get_attendance_read_service),
+    _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
+) -> schemas.AttendanceRecordSummaryRead:
+    return await service.summarize_records(query)
+
+
+@router.get("/records/{record_id}", response_model=schemas.AttendanceRecordRead)
+async def get_attendance_record(
+    record_id: uuid.UUID,
+    service: AttendanceService = Depends(get_attendance_read_service),
+    _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
+) -> schemas.AttendanceRecordRead:
+    return await service.get_record(record_id)
+
+
+@router.patch("/records/{record_id}", response_model=schemas.AttendanceRecordRead)
+async def update_attendance_record(
+    record_id: uuid.UUID,
+    payload: schemas.AttendanceRecordUpdate,
+    service: AttendanceService = Depends(get_attendance_read_service),
+    _: User = Depends(require_roles(RoleName.admin, RoleName.hr)),
+) -> schemas.AttendanceRecordRead:
+    return await service.update_record(record_id, payload)

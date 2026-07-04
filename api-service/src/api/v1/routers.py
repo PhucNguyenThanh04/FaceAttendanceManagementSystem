@@ -8,6 +8,7 @@ from src.api.v1.features.employee_onboarding.controller import (
     router as employee_onboarding_router,
 )
 from src.api.v1.features.face_profiles.controller import router as face_profile_router
+from src.api.v1.features.leaves.controller import router as leaves_router
 from src.api.v1.features.staff.departments.controller import router as department_router
 from src.api.v1.features.staff.employees.controller import router as employee_router
 from src.api.v1.features.users.controller import router as user_router
@@ -30,6 +31,7 @@ api_router.include_router(position_router)
 api_router.include_router(work_shift_router)
 api_router.include_router(assignment_router)
 api_router.include_router(attendance_router)
+api_router.include_router(leaves_router)
 api_router.include_router(face_profile_router)
 api_router.include_router(upload_avatar_router)
 api_router.include_router(documents_router)

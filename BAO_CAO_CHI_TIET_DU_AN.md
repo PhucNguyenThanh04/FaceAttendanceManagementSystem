@@ -10,6 +10,114 @@ Hệ thống được thiết kế theo kiến trúc microservices/dịch vụ p
 
 ---
 
+## 2. Sơ Đồ Kiến Trúc Hệ Thống Chi Tiết
+
+Dưới đây là sơ đồ kiến trúc hệ thống mô tả chi tiết luồng xử lý và tương tác giữa các lớp Client, dịch vụ Backend API, dịch vụ AI nhận diện, dịch vụ trợ lý ảo Agentic RAG và các hệ thống lưu trữ/bên thứ ba:
+
+```mermaid
+graph TD
+    %% Styling
+    classDef client fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef service fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px;
+    classDef datastore fill:#fff3e0,stroke:#e65100,stroke-width:2px;
+    classDef external fill:#fce4ec,stroke:#880e4f,stroke-width:2px;
+
+    subgraph ClientLayer["Lớp Client & Thiết Bị Ngoại Vi"]
+        Web["React Web Dashboard <br/> React Router / Zustand / Tailwind"]:::client
+        Mobile["Mobile Application <br/> Flutter / React Native"]:::client
+        Camera["IP Camera / Video Feed <br/> RTSP Stream / Local Webcam"]:::client
+    end
+
+    subgraph GatewayCore["Lớp Nghiệp Vụ Chính (api-service - FastAPI)"]
+        API["FastAPI Gateway / Router"]:::service
+        AuthService["Auth Service <br/> JWT / OTP / Blacklist"]:::service
+        HRService["HR & Staff Service <br/> Departments / Positions"]:::service
+        ShiftService["Work Shift Service <br/> Calendar / Rostering"]:::service
+        AttService["Attendance Service <br/> Record Calculator"]:::service
+        LeavesService["Leaves & Corrections <br/> Approval Workflows"]:::service
+        DocService["Document Service <br/> ACL Permissions"]:::service
+    end
+
+    subgraph AIServiceLayer["Lớp Xử Lý Nhận Diện (attendance-service - FastAPI)"]
+        AI_Server["FastAPI AI Server"]:::service
+        CV_Pipe["OpenCV Pipe Processor"]:::service
+        AntiSpoof["Liveness Detector <br/> Silent Face Anti Spoofing"]:::service
+        Embedder["Face Embedder Model"]:::service
+        AttWorker["Attendance Worker <br/> Realtime Frame Consumer"]:::service
+    end
+
+    subgraph RAGLayer["Lớp Trợ Lý Trí Tuệ Nhân Tạo (agentic-rag - FastAPI)"]
+        RAG_Server["FastAPI RAG Service"]:::service
+        Supervisor["ReAct Supervisor Agent"]:::service
+        Executor["Tool Executor"]:::service
+        Tools["Tool Registry <br/> VectorSearch / APIService / AskUser"]:::service
+        Chunker["Legal Chunker & Loader <br/> PDF/Docx Parser"]:::service
+        EmbedRerank["Embed & Rerank Pipe <br/> BGE-M3 & Reranker v2"]:::service
+    end
+
+    subgraph DataStoreLayer["Lớp Cơ Sở Dữ Liệu & Bộ Nhớ Đệm"]
+        Postgres[("PostgreSQL 15 <br/> Relational Data")]:::datastore
+        Redis[("Redis 7 Cache <br/> Sessions / OTP / Pending States")]:::datastore
+        Qdrant[("Qdrant Vector DB <br/> face_profiles / company_policy")]:::datastore
+    end
+
+    subgraph ExternalServices["Dịch Vụ Ngoại Vi"]
+        Gemini["Google Gemini API <br/> Gemini 1.5 / Flash / Pro"]:::external
+        SMTP["SMTP Email Server <br/> OTP Notifications"]:::external
+    end
+
+    %% Connect Layer
+    Web <-->|HTTP REST / JSON| API
+    Mobile <-->|HTTP REST / JSON| API
+    Camera -->|RTSP / Frames| AttWorker
+
+    %% api-service connections
+    API --> AuthService
+    API --> HRService
+    API --> ShiftService
+    API --> AttService
+    API --> LeavesService
+    API --> DocService
+
+    AuthService <--> Redis
+    AuthService --> SMTP
+    
+    HRService <--> Postgres
+    ShiftService <--> Postgres
+    AttService <--> Postgres
+    LeavesService <--> Postgres
+    DocService <--> Postgres
+
+    %% attendance-service connections
+    AI_Server --> CV_Pipe
+    CV_Pipe --> AntiSpoof
+    CV_Pipe --> Embedder
+    AttWorker --> CV_Pipe
+    Embedder -->|Search & Match Vectors| Qdrant
+    AttWorker -->|POST Raw Events| API
+
+    %% agentic-rag connections
+    API <-->|Trigger Chats & Sync| RAG_Server
+    RAG_Server --> Supervisor
+    Supervisor <--> Executor
+    Executor --> Tools
+    Tools -->|Vector Search| Qdrant
+    Tools -->|HTTP Query Staff/Att| API
+    Supervisor <-->|Call LLM JSON/Stream| Gemini
+    
+    %% Redis caching for RAG
+    Supervisor <-->|Save/Resume Pending State| Redis
+
+    %% Documents ingestion
+    RAG_Server --> Chunker
+    Chunker --> EmbedRerank
+    EmbedRerank -->|Upsert Sparse/Dense Vectors| Qdrant
+end
+```
+
+---
+
+
 ## 2. Bài Toán Dự Án Giải Quyết
 Hệ thống ra đời nhằm giải quyết các bất cập lớn trong công tác quản lý nhân sự truyền thống tại doanh nghiệp:
 *   **Gian lận chấm công (Buddy Punching):** Ngăn chặn triệt để tình trạng chấm công hộ bằng việc sử dụng nhận diện khuôn mặt kết hợp công nghệ chống giả mạo bằng hình ảnh hoặc video (Liveness Detection/Anti-Spoofing).

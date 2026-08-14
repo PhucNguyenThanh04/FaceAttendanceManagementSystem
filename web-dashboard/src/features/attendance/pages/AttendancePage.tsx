@@ -1,58 +1,103 @@
 import { useMemo, useState } from 'react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Loading } from '@/components/ui/Loading'
 import { Select } from '@/components/ui/Select'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { Table } from '@/components/ui/Table'
 import { useAttendanceEvents } from '@/features/attendance/hooks/useAttendanceEvents'
+import { AttendanceRecordsPanel } from '@/features/attendance/components/AttendanceRecordsPanel'
 import type { AttendanceEventType } from '@/features/attendance/types/attendance.types'
-import { useEmployees } from '@/features/employees/hooks/useEmployees'
+import { useEmployees, useMyEmployeeProfile } from '@/features/employees/hooks/useEmployees'
+import type { Employee } from '@/features/employees/types/employee.types'
+import { useAuthStore } from '@/stores/auth.store'
 import { formatDateTime, getApiErrorMessage } from '@/lib/utils'
 
 export function AttendancePage() {
+  const role = useAuthStore((state) => state.user?.role_name)
+  const isEmployee = role === 'employee'
+
   const [employeeId, setEmployeeId] = useState<string>('')
   const [eventType, setEventType] = useState<AttendanceEventType | ''>('')
   const [status, setStatus] = useState<'accepted' | 'rejected' | ''>('')
+  const [view, setView] = useState<'records' | 'events'>('records')
 
-  // Load all active employees for filtering and mapping names
-  const employeesQuery = useEmployees({ page: 1, page_size: 200 })
+  // Load my profile if I'm an employee
+  const myProfileQuery = useMyEmployeeProfile(isEmployee)
+  const myEmployeeId = myProfileQuery.data?.employee_id
+
+  // Load all active employees for filtering and mapping names (only if not an employee)
+  const employeesQuery = useEmployees({ page: 1, page_size: 200 }, !isEmployee)
   const employees = employeesQuery.data?.items
 
   const employeeMap = useMemo(() => {
-    return new Map((employees ?? []).map((emp) => [emp.employee_id, emp]))
-  }, [employees])
+    const map = new Map<string, Employee>()
+    if (employees) {
+      employees.forEach((emp) => map.set(emp.employee_id, emp))
+    }
+    if (myProfileQuery.data) {
+      map.set(myProfileQuery.data.employee_id, myProfileQuery.data)
+    }
+    return map
+  }, [employees, myProfileQuery.data])
 
-  const attendanceEventsQuery = useAttendanceEvents({
-    employee_id: employeeId || undefined,
-    event_type: eventType || undefined,
-    accepted: status === 'accepted' ? true : status === 'rejected' ? false : undefined,
-  })
+  const targetEmployeeId = isEmployee ? myEmployeeId : employeeId
+
+  const attendanceEventsQuery = useAttendanceEvents(
+    {
+      employee_id: targetEmployeeId || undefined,
+      event_type: eventType || undefined,
+      accepted: status === 'accepted' ? true : status === 'rejected' ? false : undefined,
+    },
+    !isEmployee || Boolean(myEmployeeId)
+  )
 
   const events = attendanceEventsQuery.data ?? []
+
+  if (view === 'records') {
+    return (
+      <section className="page-stack">
+        <PageHeader
+          actions={<Button onClick={() => setView('events')} variant="secondary">Xem sự kiện nhận diện</Button>}
+          description="Theo dõi bảng công đã tổng hợp, trạng thái đi làm và chỉnh sửa bản ghi khi cần."
+          eyebrow="Attendance"
+          title="Bảng công"
+        />
+        <AttendanceRecordsPanel employees={employees ?? []} role={role} />
+      </section>
+    )
+  }
 
   return (
     <section className="page-stack">
       <PageHeader
-        description="Theo dõi lịch sử chấm công nhận diện khuôn mặt thực tế qua API /attendance/events."
+        actions={<Button onClick={() => setView('records')} variant="secondary">Xem bảng công</Button>}
+        description={
+          isEmployee
+            ? 'Theo dõi lịch sử chấm công nhận diện khuôn mặt thực tế của bạn.'
+            : 'Theo dõi lịch sử chấm công nhận diện khuôn mặt thực tế qua API /attendance/events.'
+        }
         eyebrow="Attendance"
-        title="Lịch sử chấm công"
+        title={isEmployee ? 'Lịch sử chấm công của tôi' : 'Lịch sử chấm công'}
       />
 
       <div className="toolbar">
-        <Select
-          label="Nhân viên"
-          onChange={(e) => setEmployeeId(e.target.value)}
-          value={employeeId}
-        >
-          <option value="">Tất cả nhân viên</option>
-          {employees?.map((emp) => (
-            <option key={emp.employee_id} value={emp.employee_id}>
-              {emp.full_name} ({emp.employee_code})
-            </option>
-          ))}
-        </Select>
+        {!isEmployee ? (
+          <Select
+            label="Nhân viên"
+            onChange={(e) => setEmployeeId(e.target.value)}
+            value={employeeId}
+          >
+            <option value="">Tất cả nhân viên</option>
+            {employees?.map((emp) => (
+              <option key={emp.employee_id} value={emp.employee_id}>
+                {emp.full_name} ({emp.employee_code})
+              </option>
+            ))}
+          </Select>
+        ) : null}
 
         <Select
           label="Loại sự kiện"
@@ -75,12 +120,12 @@ export function AttendancePage() {
         </Select>
       </div>
 
-      {attendanceEventsQuery.isLoading || employeesQuery.isLoading ? <Loading /> : null}
+      {attendanceEventsQuery.isLoading || employeesQuery.isLoading || myProfileQuery.isLoading ? <Loading /> : null}
 
-      {attendanceEventsQuery.isError || employeesQuery.isError ? (
+      {attendanceEventsQuery.isError || employeesQuery.isError || myProfileQuery.isError ? (
         <StatusMessage tone="error">
           {getApiErrorMessage(
-            attendanceEventsQuery.error || employeesQuery.error,
+            attendanceEventsQuery.error || employeesQuery.error || myProfileQuery.error,
             'Không thể tải dữ liệu lịch sử chấm công.'
           )}
         </StatusMessage>
@@ -97,7 +142,7 @@ export function AttendancePage() {
         <Table>
           <thead>
             <tr>
-              <th>Nhân viên</th>
+              {!isEmployee && <th>Nhân viên</th>}
               <th>Thời gian</th>
               <th>Loại sự kiện</th>
               <th>Trạng thái</th>
@@ -112,18 +157,20 @@ export function AttendancePage() {
               const emp = event.employee_id ? employeeMap.get(event.employee_id) : null
               return (
                 <tr key={event.event_id}>
-                  <td>
-                    {emp ? (
-                      <div>
-                        <strong>{emp.full_name}</strong>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                          {emp.employee_code}
+                  {!isEmployee && (
+                    <td>
+                      {emp ? (
+                        <div>
+                          <strong>{emp.full_name}</strong>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            {emp.employee_code}
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <span style={{ color: 'var(--text-secondary)' }}>Không xác định</span>
-                    )}
-                  </td>
+                      ) : (
+                        <span style={{ color: 'var(--text-secondary)' }}>Không xác định</span>
+                      )}
+                    </td>
+                  )}
                   <td>{formatDateTime(event.event_time)}</td>
                   <td>
                     <Badge tone={event.event_type === 'check_in' ? 'green' : 'blue'}>

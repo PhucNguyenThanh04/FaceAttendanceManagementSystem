@@ -1,0 +1,151 @@
+%% ERD RUT GON - FACE ATTENDANCE MANAGEMENT SYSTEM
+%% Cach dung: draw.io -> Insert -> Advanced -> Mermaid -> dan toan bo noi dung file nay.
+%% Nen dat trang ngang (Landscape) de so do de doc.
+%%
+%% Pham vi luan van khong nhan manh Manager, vi vay so do chu dong bo:
+%% - department_managers
+%% - employees.manager_id
+%%
+%% Cac bang log/ho tro va nghiep vu phu cung duoc luoc bo de tiet kiem khong gian:
+%% holidays, leave_*, attendance_correction_*, audit_logs,
+%% notifications, system_settings.
+
+erDiagram
+    ROLES {
+        INT role_id PK
+        ENUM name UK
+        TEXT description
+    }
+
+    USERS {
+        UUID user_id PK
+        VARCHAR email UK
+        VARCHAR password_hash
+        INT role_id FK
+        ENUM status
+    }
+
+    DEPARTMENTS {
+        INT department_id PK
+        VARCHAR code UK
+        VARCHAR name
+        BOOLEAN is_active
+    }
+
+    POSITIONS {
+        INT position_id PK
+        VARCHAR code UK
+        VARCHAR name UK
+        BOOLEAN is_active
+    }
+
+    EMPLOYEES {
+        UUID employee_id PK
+        UUID user_id FK "UNIQUE, nullable"
+        VARCHAR employee_code UK
+        VARCHAR full_name
+        VARCHAR phone "nullable"
+        INT department_id FK "nullable"
+        INT position_id FK "nullable"
+        DATE hire_date "nullable"
+        ENUM status
+    }
+
+    WORK_SHIFTS {
+        INT shift_id PK
+        VARCHAR code UK
+        VARCHAR name
+        TIME start_time
+        TIME end_time
+        BOOLEAN is_overnight
+        INT late_threshold_minutes
+        INT early_leave_threshold_minutes
+        BOOLEAN is_active
+    }
+
+    EMPLOYEE_SHIFT_ASSIGNMENTS {
+        INT assignment_id PK
+        UUID employee_id FK
+        INT shift_id FK
+        DATE effective_date
+        DATE end_date "nullable"
+    }
+
+    FACE_PROFILES {
+        UUID profile_id PK
+        UUID employee_id FK "UNIQUE"
+        ENUM status
+        VARCHAR qdrant_collection
+        VARCHAR embedding_model "nullable"
+        VARCHAR embedding_version "nullable"
+    }
+
+    ATTENDANCE_EVENTS {
+        UUID event_id PK
+        UUID employee_id FK "nullable"
+        ENUM event_type
+        TIMESTAMPTZ event_time
+        FLOAT confidence_score "nullable"
+        FLOAT anti_spoof_score "nullable"
+        BOOLEAN is_accepted
+        TEXT rejection_reason "nullable"
+    }
+
+    ATTENDANCE_RECORDS {
+        UUID record_id PK
+        UUID employee_id FK
+        INT shift_id FK "nullable"
+        DATE work_date "UNIQUE voi employee_id"
+        TIMESTAMPTZ check_in_time "nullable"
+        TIMESTAMPTZ check_out_time "nullable"
+        ENUM status
+        INT late_minutes
+        INT early_leave_minutes
+        INT worked_minutes
+        ENUM source
+    }
+
+    DOCUMENTS {
+        UUID id PK
+        UUID uploaded_by FK "nullable"
+        TEXT title
+        TEXT file_name
+        VARCHAR file_type
+        ARRAY allowed_roles
+        ENUM status
+        INT chunk_count
+        TEXT qdrant_collection
+    }
+
+    CONVERSATIONS {
+        UUID id PK
+        UUID employee_id FK
+        TEXT title
+    }
+
+    CHAT_MESSAGES {
+        UUID id PK
+        UUID conversation_id FK
+        ENUM role
+        TEXT content
+        JSONB citations "nullable"
+        BOOLEAN ask_user
+        TIMESTAMPTZ created_at
+    }
+
+    ROLES ||--o{ USERS : "phân quyền"
+    USERS o|--o| EMPLOYEES : "liên kết tài khoản"
+    DEPARTMENTS o|--o{ EMPLOYEES : "thuộc phòng ban"
+    POSITIONS o|--o{ EMPLOYEES : "giữ chức vụ"
+
+    EMPLOYEES ||--o{ EMPLOYEE_SHIFT_ASSIGNMENTS : "được phân ca"
+    WORK_SHIFTS ||--o{ EMPLOYEE_SHIFT_ASSIGNMENTS : "được áp dụng"
+
+    EMPLOYEES ||--o| FACE_PROFILES : "có hồ sơ khuôn mặt"
+    EMPLOYEES o|--o{ ATTENDANCE_EVENTS : "phát sinh sự kiện"
+    EMPLOYEES ||--o{ ATTENDANCE_RECORDS : "có bảng công"
+    WORK_SHIFTS o|--o{ ATTENDANCE_RECORDS : "đối chiếu ca"
+
+    EMPLOYEES o|--o{ DOCUMENTS : "tải lên"
+    EMPLOYEES ||--o{ CONVERSATIONS : "tạo hội thoại"
+    CONVERSATIONS ||--o{ CHAT_MESSAGES : "chứa tin nhắn"

@@ -27,10 +27,11 @@ class ChatboxClient:
         self._api_key = settings.rag_api_key
         self._default_headers = {"X-API-Key": self._api_key} if self._api_key else {}
 
-    async def chat(self, request: ChatRequest) -> ChatResponse:
+    async def chat(self, request: ChatRequest, *, access_token: str) -> ChatResponse:
         data = await self._request_json(
             method="POST",
             path=ChatboxPaths.CHAT_MESSAGE,
+            access_token=access_token,
             json=request.model_dump(mode="json"),
         )
         return ChatResponse.model_validate(data)
@@ -38,8 +39,11 @@ class ChatboxClient:
     async def chat_stream(
         self,
         request: ChatRequest,
+        *,
+        access_token: str,
     ) -> AsyncGenerator[tuple[str, dict[str, Any]], None]:
         headers = dict(self._default_headers)
+        headers.update(self._authorization_header(access_token))
         headers["Accept"] = "text/event-stream"
 
         async with self._http.stream(
@@ -124,11 +128,14 @@ class ChatboxClient:
         method: str,
         path: str,
         require_api_key: bool = True,
+        access_token: str | None = None,
         **kwargs: Any,
     ) -> Any:
         headers = dict(kwargs.pop("headers", {}))
         if require_api_key:
             headers.update(self._default_headers)
+        if access_token is not None:
+            headers.update(self._authorization_header(access_token))
 
         response = await self._http.request(method, path, headers=headers, **kwargs)
         response.raise_for_status()
@@ -140,6 +147,13 @@ class ChatboxClient:
             response.text,
         )
         return response.json()
+
+    @staticmethod
+    def _authorization_header(access_token: str) -> dict[str, str]:
+        token = access_token.strip()
+        if not token:
+            raise ValueError("access_token must not be empty")
+        return {"Authorization": f"Bearer {token}"}
 
     @staticmethod
     def _build_multipart_body(

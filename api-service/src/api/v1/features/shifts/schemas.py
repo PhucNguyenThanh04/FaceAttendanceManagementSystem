@@ -146,6 +146,18 @@ class HolidayRead(HolidayBase):
     updated_at: datetime
 
 
+class HolidayListQuery(BaseModel):
+    year: int | None = Field(default=None, ge=1900, le=9999)
+    date_from: date | None = None
+    date_to: date | None = None
+
+    @model_validator(mode="after")
+    def validate_date_window(self) -> "HolidayListQuery":
+        if self.date_from and self.date_to and self.date_to < self.date_from:
+            raise ValueError("date_to must be on/after date_from")
+        return self
+
+
 class ShiftListQuery(BaseModel):
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=200)

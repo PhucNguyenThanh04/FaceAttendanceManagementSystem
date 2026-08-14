@@ -3,6 +3,7 @@ import type {
   Employee,
   EmployeeListParams,
   EmployeeListResponse,
+  EmployeeUpdatePayload,
 } from '@/features/employees/types/employee.types'
 
 export const employeeApi = {
@@ -17,5 +18,16 @@ export const employeeApi = {
   getMyEmployeeProfile: async (): Promise<Employee> => {
     const response = await api.get<Employee>('/employees/me')
     return response.data
+  },
+  updateEmployee: async (employeeId: string, payload: EmployeeUpdatePayload): Promise<Employee> => {
+    const response = await api.patch<Employee>(`/employees/${employeeId}`, payload)
+    return response.data
+  },
+  activateEmployee: async (employeeId: string): Promise<Employee> => {
+    const response = await api.post<Employee>(`/employees/activate/${employeeId}`)
+    return response.data
+  },
+  deleteEmployee: async (employeeId: string): Promise<void> => {
+    await api.delete(`/employees/${employeeId}`)
   },
 }

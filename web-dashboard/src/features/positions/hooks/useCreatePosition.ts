@@ -11,3 +11,27 @@ export function useCreatePosition() {
     },
   })
 }
+
+export function useUpdatePosition() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ positionId, payload }: { positionId: number; payload: Parameters<typeof positionApi.updatePosition>[1] }) => positionApi.updatePosition(positionId, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['positions'] }),
+  })
+}
+
+export function useDeactivatePosition() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: positionApi.deactivatePosition,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['positions'] }),
+  })
+}
+
+export function useDeletePosition() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: positionApi.deletePosition,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['positions'] }),
+  })
+}

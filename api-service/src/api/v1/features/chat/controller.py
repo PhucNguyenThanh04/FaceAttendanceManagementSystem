@@ -12,7 +12,11 @@ from src.api.v1.features.chat.service import (
 )
 from src.api.v1.features.staff.models import Employee
 from src.api.v1.features.users.models import User
-from src.core.dependencies.auth import get_current_employee, get_current_user
+from src.core.dependencies.auth import (
+    get_current_access_token,
+    get_current_employee,
+    get_current_user,
+)
 
 router = APIRouter(prefix="/chat", tags=["Conversations"])
 
@@ -52,12 +56,14 @@ async def send_new_message(
     payload: schemas.SendMessageRequest,
     current_employee: Employee = Depends(get_current_employee),
     current_user: User = Depends(get_current_user),
+    access_token: str = Depends(get_current_access_token),
     service: ConversationService = Depends(get_conversation_service),
 ) -> schemas.NewMessageResponse:
     return await service.send_new_message(
         payload=payload,
         current_employee=current_employee,
         current_user=current_user,
+        access_token=access_token,
     )
 
 
@@ -95,6 +101,7 @@ async def send_message(
     payload: schemas.SendMessageRequest,
     current_employee: Employee = Depends(get_current_employee),
     current_user: User = Depends(get_current_user),
+    access_token: str = Depends(get_current_access_token),
     service: ConversationService = Depends(get_conversation_service),
 ) -> schemas.SendMessageResponse:
     return await service.send_message(
@@ -102,6 +109,7 @@ async def send_message(
         payload=payload,
         current_employee=current_employee,
         current_user=current_user,
+        access_token=access_token,
     )
 
 
@@ -111,6 +119,7 @@ async def send_message_stream(
     payload: schemas.SendMessageRequest,
     current_employee: Employee = Depends(get_current_employee),
     current_user: User = Depends(get_current_user),
+    access_token: str = Depends(get_current_access_token),
     service: ConversationService = Depends(get_conversation_service),
 ) -> StreamingResponse:
     stream = await service.send_message_stream(
@@ -118,6 +127,7 @@ async def send_message_stream(
         payload=payload,
         current_employee=current_employee,
         current_user=current_user,
+        access_token=access_token,
     )
     return StreamingResponse(
         stream,

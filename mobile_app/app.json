@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile_app",
+    "name": "Face Attendance",
     "slug": "mobile_app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -17,7 +17,7 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": true
     },
     "web": {
       "output": "static",
@@ -25,6 +25,12 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Ứng dụng cần quyền truy cập thư viện ảnh để thay đổi ảnh đại diện."
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -34,7 +40,11 @@
             "imageWidth": 76
           }
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-image",
+      "expo-web-browser",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

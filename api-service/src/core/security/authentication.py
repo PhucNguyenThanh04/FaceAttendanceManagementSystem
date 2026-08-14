@@ -13,6 +13,8 @@ from src.core.configs.settings import settings
 JWT_SECRET_KEY = settings.jwt_secret_key
 REFRESH_TOKEN_SECRET_KEY = settings.refresh_token_secret_key
 ALGORITHM = settings.jwt_algorithm
+JWT_ISSUER = settings.jwt_issuer
+JWT_AUDIENCE = settings.jwt_audience
 
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 REFRESH_TOKEN_EXPIRE_DAYS = settings.refresh_token_expire_days
@@ -49,6 +51,8 @@ def create_access_token(
         "token_version": token_version,
         "jti": jti,
         "type": "access",
+        "iss": JWT_ISSUER,
+        "aud": JWT_AUDIENCE,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     }
@@ -68,6 +72,8 @@ def decode_access_token(token: str) -> dict[str, Any]:
             token,
             JWT_SECRET_KEY,
             algorithms=[ALGORITHM],
+            issuer=JWT_ISSUER,
+            audience=JWT_AUDIENCE,
         )
     except JWTError:
         raise TokenError("Invalid access token")
@@ -75,7 +81,7 @@ def decode_access_token(token: str) -> dict[str, Any]:
     if payload.get("type") != "access":
         raise TokenError("Invalid token type")
 
-    required_fields = ["sub", "jti", "token_version", "exp"]
+    required_fields = ["sub", "jti", "token_version", "iss", "aud", "exp"]
 
     for field in required_fields:
         if field not in payload:
@@ -119,4 +125,3 @@ def hash_password_reset_token(reset_token: str) -> str:
         reset_token.encode(),
         hashlib.sha256,
     ).hexdigest()
-

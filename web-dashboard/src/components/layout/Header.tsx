@@ -1,14 +1,16 @@
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
-import { routePaths } from '@/constants/routes'
+import { getNavigationItemsForRole, routePaths } from '@/constants/routes'
 import { useLogout } from '@/features/auth/hooks/useLogout'
 import { getInitials } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth.store'
 
-export function Header() {
+export function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const user = useAuthStore((state) => state.user)
   const logoutMutation = useLogout()
+  const currentPage = getNavigationItemsForRole(user?.role_name).find((item) => item.path === location.pathname)
 
   const handleLogout = () => {
     logoutMutation.mutate(undefined, {
@@ -18,9 +20,9 @@ export function Header() {
 
   return (
     <header className="header">
-      <div>
-        <p className="eyebrow">Dashboard</p>
-        <h1>Agentic RAG</h1>
+      <div className="header__title">
+        <button aria-label="Mở điều hướng" className="header__menu" onClick={onMenuToggle} type="button">☰</button>
+        <div><p className="eyebrow">Face Attendance</p><h1>{currentPage?.label ?? 'Tổng quan'}</h1></div>
       </div>
       <div className="header__account">
         <div className="avatar" aria-hidden="true">
@@ -28,7 +30,7 @@ export function Header() {
         </div>
         <div className="header__user">
           <strong>{user?.email ?? 'Đang xác thực'}</strong>
-          <span>{user?.role_name ?? 'unknown'}</span>
+          <span>{user?.role_name === 'admin' ? 'Quản trị viên' : user?.role_name === 'hr' ? 'Nhân sự' : user?.role_name === 'manager' ? 'Quản lý' : 'Nhân viên'}</span>
         </div>
         <Button
           isLoading={logoutMutation.isPending}

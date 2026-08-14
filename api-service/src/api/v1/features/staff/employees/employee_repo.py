@@ -40,7 +40,9 @@ class EmployeeRepo:
         if normalized_code is None:
             return False
 
-        stmt = select(Employee.employee_id).where(Employee.employee_code == normalized_code)
+        stmt = select(Employee.employee_id).where(
+            Employee.employee_code == normalized_code
+        )
         if exclude_employee_id is not None:
             stmt = stmt.where(Employee.employee_id != exclude_employee_id)
         return (await self.db.execute(stmt)).first() is not None
@@ -108,6 +110,21 @@ class EmployeeRepo:
             .where(Employee.employee_code == employee_code.strip())
         )
 
+    async def list_subordinates(self, manager_id: uuid.UUID) -> list[Employee]:
+        try:
+            result = await self.db.execute(
+                select(Employee)
+                .where(Employee.manager_id == manager_id)
+                .order_by(Employee.full_name.asc(), Employee.employee_code.asc())
+            )
+            return list(result.scalars().all())
+        except Exception as exc:
+            logger.exception(
+                "Failed to list subordinates: manager_id=%s",
+                manager_id,
+            )
+            raise DatabaseException("Failed to list subordinates") from exc
+
     async def get_face_profile_by_employee_id(
         self,
         employee_id: uuid.UUID,
@@ -132,6 +149,7 @@ class EmployeeRepo:
         position_id: int | None = None,
         manager_id: uuid.UUID | None = None,
         status=None,
+        visible_employee_ids: set[uuid.UUID] | None = None,
     ) -> tuple[list[Employee], int]:
         if page < 1:
             page = 1
@@ -159,6 +177,10 @@ class EmployeeRepo:
             stmt = stmt.where(Employee.manager_id == manager_id)
         if status is not None:
             stmt = stmt.where(Employee.status == status)
+        if visible_employee_ids is not None:
+            if not visible_employee_ids:
+                return [], 0
+            stmt = stmt.where(Employee.employee_id.in_(visible_employee_ids))
 
         count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
         total = int((await self.db.scalar(count_stmt)) or 0)
@@ -213,7 +235,9 @@ class EmployeeRepo:
         target_year = year or datetime.now().year
         prefix = f"EMP_{target_year}_"
         result = await self.db.execute(
-            select(Employee.employee_code).where(Employee.employee_code.like(f"{prefix}%"))
+            select(Employee.employee_code).where(
+                Employee.employee_code.like(f"{prefix}%")
+            )
         )
         existing_codes = result.scalars().all()
 
@@ -221,7 +245,7 @@ class EmployeeRepo:
         for code in existing_codes:
             if not code or not code.startswith(prefix):
                 continue
-            suffix = code[len(prefix):]
+            suffix = code[len(prefix) :]
             if suffix.isdigit():
                 max_seq = max(max_seq, int(suffix))
 
@@ -280,10 +304,13 @@ class EmployeeRepo:
                 changed = True
 
         if deactivate_linked_entities:
-            changed = self._apply_deactivation_side_effects(
-                employee=employee,
-                reason=deactivation_reason or "Employee deactivated",
-            ) or changed
+            changed = (
+                self._apply_deactivation_side_effects(
+                    employee=employee,
+                    reason=deactivation_reason or "Employee deactivated",
+                )
+                or changed
+            )
 
         if changed:
             try:
@@ -332,7 +359,10 @@ class EmployeeRepo:
                 employee.user.token_version += 1
                 changed = True
 
-        if employee.face_profile is not None and employee.face_profile.status != FaceProfileStatus.revoked:
+        if (
+            employee.face_profile is not None
+            and employee.face_profile.status != FaceProfileStatus.revoked
+        ):
             employee.face_profile.status = FaceProfileStatus.revoked
             employee.face_profile.revocation_reason = reason
             employee.face_profile.revoked_at = now
@@ -352,7 +382,10 @@ class EmployeeRepo:
             employee.user.token_version += 1
             changed = True
 
-        if employee.face_profile is not None and employee.face_profile.status != FaceProfileStatus.active:
+        if (
+            employee.face_profile is not None
+            and employee.face_profile.status != FaceProfileStatus.active
+        ):
             employee.face_profile.status = FaceProfileStatus.active
             employee.face_profile.revocation_reason = None
             employee.face_profile.revoked_at = None

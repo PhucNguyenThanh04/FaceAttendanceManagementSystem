@@ -1,19 +1,22 @@
 import { Table } from '@/components/ui/Table'
+import { Button } from '@/components/ui/Button'
 import { EmployeeStatusBadge } from '@/features/employees/components/EmployeeStatusBadge'
 import type { Employee } from '@/features/employees/types/employee.types'
 import { formatDate } from '@/lib/utils'
 
 type EmployeeTableProps = {
+  canManage?: boolean
   departmentNames: Map<number, string>
   employees: Employee[]
   positionNames: Map<number, string>
+  onSelect?: (employee: Employee) => void
 }
 
 function getNameById(names: Map<number, string>, id: number | null): string {
   return id ? names.get(id) ?? `#${id}` : '-'
 }
 
-export function EmployeeTable({ departmentNames, employees, positionNames }: EmployeeTableProps) {
+export function EmployeeTable({ canManage, departmentNames, employees, onSelect, positionNames }: EmployeeTableProps) {
   return (
     <Table>
       <thead>
@@ -24,6 +27,7 @@ export function EmployeeTable({ departmentNames, employees, positionNames }: Emp
           <th>Chức vụ</th>
           <th>Ngày vào</th>
           <th>Trạng thái</th>
+          {canManage ? <th>Thao tác</th> : null}
         </tr>
       </thead>
       <tbody>
@@ -44,6 +48,7 @@ export function EmployeeTable({ departmentNames, employees, positionNames }: Emp
             <td>
               <EmployeeStatusBadge status={employee.status} />
             </td>
+            {canManage ? <td><Button size="sm" variant="secondary" onClick={() => onSelect?.(employee)}>Quản lý</Button></td> : null}
           </tr>
         ))}
       </tbody>

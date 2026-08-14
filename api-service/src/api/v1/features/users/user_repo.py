@@ -29,9 +29,11 @@ class UserRepo:
         return email.strip().lower()
 
     def _user_stmt(self) -> Select:
-            return select(models.User).options(selectinload(models.User.role))
+        return select(models.User).options(selectinload(models.User.role))
 
-    async def email_exists(self, email: str, exclude_user_id: UUID | None = None) -> bool:
+    async def email_exists(
+        self, email: str, exclude_user_id: UUID | None = None
+    ) -> bool:
         normalized = self._normalize_email(email)
         stmt = select(models.User.user_id).where(models.User.email == normalized)
         if exclude_user_id is not None:
@@ -41,7 +43,9 @@ class UserRepo:
         return result.first() is not None
 
     async def get_role_by_name(self, role_name: RoleName) -> models.Role | None:
-        result = await self.db.execute(select(models.Role).where(models.Role.name == role_name))
+        result = await self.db.execute(
+            select(models.Role).where(models.Role.name == role_name)
+        )
         return result.scalar_one_or_none()
 
     async def get_user_by_id(self, user_id: UUID) -> models.User | None:
@@ -49,6 +53,28 @@ class UserRepo:
             self._user_stmt().where(models.User.user_id == user_id)
         )
         return result.scalar_one_or_none()
+
+    async def get_user_for_update(self, user_id: UUID) -> models.User | None:
+        result = await self.db.execute(
+            self._user_stmt()
+            .where(models.User.user_id == user_id)
+            .with_for_update(of=models.User)
+        )
+        return result.scalar_one_or_none()
+
+    async def lock_active_admin_ids(self) -> list[UUID]:
+        stmt = (
+            select(models.User.user_id)
+            .join(models.Role, models.Role.role_id == models.User.role_id)
+            .where(
+                models.Role.name == RoleName.admin,
+                models.User.status == UserStatus.active,
+            )
+            .order_by(models.User.user_id)
+            .with_for_update(of=models.User)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
 
     async def get_user_by_email(self, email: str) -> models.User | None:
         normalized = self._normalize_email(email)
@@ -90,11 +116,15 @@ class UserRepo:
         if role is not None:
             base_stmt = base_stmt.where(models.Role.name == role)
 
-        count_stmt = select(func.count()).select_from(base_stmt.order_by(None).subquery())
+        count_stmt = select(func.count()).select_from(
+            base_stmt.order_by(None).subquery()
+        )
         total = int((await self.db.scalar(count_stmt)) or 0)
 
         result = await self.db.execute(
-            base_stmt.order_by(models.User.created_at.desc()).offset(offset).limit(page_size)
+            base_stmt.order_by(models.User.created_at.desc())
+            .offset(offset)
+            .limit(page_size)
         )
         users = result.scalars().all()
         return users, total
@@ -136,42 +166,25 @@ class UserRepo:
             raise
         except Exception as exc:
             await self.db.rollback()
-            logger.exception("Failed to create user in repo: email=%s", normalized_email)
+            logger.exception(
+                "Failed to create user in repo: email=%s", normalized_email
+            )
             raise DatabaseException("Failed to create user") from exc
 
-    async def update_user(
+    async def update_profile(
         self,
         user_id: UUID,
         *,
-        email: str | None = None,
-        status: UserStatus | None = None,
-        role_name: RoleName | None = None,
-        password_hash: str | None = None,
+        email: str,
     ) -> models.User:
         user = await self.get_user_or_404(user_id)
         changed = False
 
-        if email is not None:
-            normalized = self._normalize_email(email)
-            if normalized != user.email:
-                if await self.email_exists(normalized, exclude_user_id=user.user_id):
-                    raise ConflictException("Email already exists")
-                user.email = normalized
-                changed = True
-
-        if status is not None and status != user.status:
-            user.status = status
-            changed = True
-
-        if password_hash is not None and password_hash != user.password_hash:
-            user.password_hash = password_hash
-            changed = True
-
-        if role_name is not None and user.role.name != role_name:
-            role = await self.get_role_by_name(role_name)
-            if role is None:
-                raise BadRequestException(message=f"Role not found: {role_name.value}")
-            user.role_id = role.role_id
+        normalized = self._normalize_email(email)
+        if normalized != user.email:
+            if await self.email_exists(normalized, exclude_user_id=user.user_id):
+                raise ConflictException("Email already exists")
+            user.email = normalized
             changed = True
 
         if changed:
@@ -187,14 +200,52 @@ class UserRepo:
             raise DatabaseException("Failed to reload updated user")
         return updated
 
-    async def update_password(self, user_id: UUID, password_hash: str) -> models.User:
-        return await self.update_user(user_id, password_hash=password_hash)
+    async def apply_security_update(
+        self,
+        user: models.User,
+        *,
+        password_hash: str | None = None,
+        role_name: RoleName | None = None,
+        status: UserStatus | None = None,
+    ) -> models.User:
+        changed = False
 
-    async def set_role(self, user_id: UUID, role_name: RoleName) -> models.User:
-        return await self.update_user(user_id, role_name=role_name)
+        if password_hash is not None:
+            user.password_hash = password_hash
+            changed = True
 
-    async def soft_delete_user(self, user_id: UUID) -> models.User:
-        return await self.update_user(user_id, status=UserStatus.inactive)
+        if role_name is not None and user.role.name != role_name:
+            role = await self.get_role_by_name(role_name)
+            if role is None:
+                raise BadRequestException(message=f"Role not found: {role_name.value}")
+            user.role_id = role.role_id
+            changed = True
+
+        if status is not None and status != user.status:
+            user.status = status
+            changed = True
+
+        if changed:
+            user.token_version += 1
+            user.refresh_token_hash = None
+            user.refresh_token_expires_at = None
+            user.refresh_token_created_at = None
+            try:
+                await self.db.commit()
+            except Exception as exc:
+                await self.db.rollback()
+                logger.exception(
+                    "Failed to apply user security update: user_id=%s",
+                    user.user_id,
+                )
+                raise DatabaseException(
+                    "Failed to update user security settings"
+                ) from exc
+
+        updated = await self.get_user_by_id(user.user_id)
+        if updated is None:
+            raise DatabaseException("Failed to reload updated user")
+        return updated
 
     async def delete_user(self, user_id: UUID) -> bool:
         user = await self.get_user_by_id(user_id)

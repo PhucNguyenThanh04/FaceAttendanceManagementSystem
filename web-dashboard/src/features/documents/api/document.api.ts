@@ -15,6 +15,12 @@ export const documentApi = {
     const response = await api.get<DocumentItem>(`/documents/${documentId}`)
     return response.data
   },
+  downloadDocument: async (documentId: string): Promise<Blob> => {
+    const response = await api.get<Blob>(`/documents/${documentId}/download`, {
+      responseType: 'blob',
+    })
+    return response.data
+  },
   uploadDocument: async (payload: UploadDocumentPayload): Promise<DocumentItem> => {
     const formData = new FormData()
     formData.append('title', payload.title)

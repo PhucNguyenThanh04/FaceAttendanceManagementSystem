@@ -43,16 +43,9 @@ class DocumentCreate(DocumentBase):
 
 class DocumentUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=300)
-    file_name: str | None = Field(default=None, min_length=1, max_length=255)
-    file_url: str | None = Field(default=None, min_length=1, max_length=500)
-    file_type: str | None = Field(default=None, min_length=1, max_length=50)
-    uploaded_by: uuid.UUID | None = None
     allowed_roles: list[str] | None = None
-    status: DocumentStatus | None = None
-    chunk_count: int | None = Field(default=None, ge=0)
-    qdrant_collection: str | None = Field(default=None, min_length=1, max_length=200)
 
-    @field_validator("title", "file_name", "file_url", "file_type", "qdrant_collection")
+    @field_validator("title")
     @classmethod
     def validate_required_text(cls, value: str | None) -> str | None:
         if value is None:
@@ -68,6 +61,8 @@ class DocumentUpdate(BaseModel):
         if value is None:
             return value
         normalized = [role.strip() for role in value if role.strip()]
+        if not normalized:
+            raise ValueError("allowed_roles must not be empty")
         if len(normalized) != len(set(normalized)):
             raise ValueError("allowed_roles must not contain duplicates")
         return normalized
@@ -79,6 +74,9 @@ class DocumentRead(DocumentBase):
     id: uuid.UUID
     created_at: datetime
     updated_at: datetime
+
+    # This is an authenticated API endpoint, never a static storage path.
+    file_url: str = Field(..., min_length=1, max_length=500)
 
 
 class DocumentListQuery(BaseModel):
@@ -94,6 +92,10 @@ class DocumentListQuery(BaseModel):
 
     @model_validator(mode="after")
     def validate_time_window(self) -> "DocumentListQuery":
-        if self.created_from and self.created_to and self.created_to < self.created_from:
+        if (
+            self.created_from
+            and self.created_to
+            and self.created_to < self.created_from
+        ):
             raise ValueError("created_to must be on/after created_from")
         return self

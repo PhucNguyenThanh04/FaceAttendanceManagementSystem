@@ -9,7 +9,11 @@ from src.api.v1.features.leaves.service import LeaveService, get_leave_service
 from src.api.v1.features.staff.models import Employee
 from src.api.v1.features.users.models import User
 from src.api.v1.shared.enums import RoleName
-from src.core.dependencies.auth import get_current_employee, get_current_user, require_roles
+from src.core.dependencies.auth import (
+    get_current_employee,
+    get_current_user,
+    require_roles,
+)
 
 router = APIRouter(prefix="/leaves", tags=["Leaves"])
 
@@ -51,7 +55,7 @@ async def get_leave_balance(
     year: int | None = None,
     service: LeaveService = Depends(get_leave_service),
     current_user: User = Depends(
-        require_roles(RoleName.hr, RoleName.manager, RoleName.employee)
+        require_roles(RoleName.admin, RoleName.hr, RoleName.manager, RoleName.employee)
     ),
 ) -> schemas.LeaveBalanceRead:
     return await service.get_leave_balance(
@@ -96,9 +100,11 @@ async def create_leave_request(
 async def get_leave_request(
     request_id: uuid.UUID,
     service: LeaveService = Depends(get_leave_service),
-    _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
+    current_user: User = Depends(
+        require_roles(RoleName.admin, RoleName.hr, RoleName.manager, RoleName.employee)
+    ),
 ) -> schemas.LeaveRequestRead:
-    return await service.get_leave_request(request_id)
+    return await service.get_leave_request(request_id, current_user)
 
 
 @router.patch("/requests/{request_id}", response_model=schemas.LeaveRequestRead)
@@ -134,7 +140,9 @@ async def review_leave_request(
     request_id: uuid.UUID,
     payload: schemas.ReviewLeaveRequest,
     service: LeaveService = Depends(get_leave_service),
-    current_user: User = Depends(require_roles(RoleName.manager, RoleName.hr, RoleName.admin)),
+    current_user: User = Depends(
+        require_roles(RoleName.manager, RoleName.hr, RoleName.admin)
+    ),
     current_employee: Employee = Depends(get_current_employee),
 ) -> schemas.LeaveRequestRead:
     return await service.review_leave_request(
@@ -142,10 +150,13 @@ async def review_leave_request(
         payload=payload,
         approver_id=current_employee.employee_id,
         reviewer_role=current_user.role_name,
+        current_user=current_user,
     )
 
 
-@router.get("/requests/{request_id}/logs", response_model=list[schemas.LeaveApprovalLogRead])
+@router.get(
+    "/requests/{request_id}/logs", response_model=list[schemas.LeaveApprovalLogRead]
+)
 async def list_leave_request_logs(
     request_id: uuid.UUID,
     service: LeaveService = Depends(get_leave_service),

@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import Depends
 from redis.asyncio import Redis
+from sqlalchemy.exc import IntegrityError
 
 from src.api.v1.features.attendance import schemas
 from src.api.v1.features.attendance.models import AttendanceEvent, AttendanceRecord
@@ -45,6 +46,24 @@ class AttendanceService:
     def _cooldown_key(employee_id: uuid.UUID) -> str:
         return f"attendance:cooldown:{employee_id}"
 
+    async def _release_cooldown(self, key: str, token: str) -> None:
+        if self.redis is None:
+            return
+        try:
+            await self.redis.eval(
+                """
+                if redis.call('get', KEYS[1]) == ARGV[1] then
+                    return redis.call('del', KEYS[1])
+                end
+                return 0
+                """,
+                1,
+                key,
+                token,
+            )
+        except Exception:
+            logger.warning("Failed to release attendance cooldown", exc_info=True)
+
     @staticmethod
     def _normalize_event_time(event_time: datetime | None) -> datetime:
         if event_time is None:
@@ -69,11 +88,15 @@ class AttendanceService:
         return value
 
     @classmethod
-    def _shift_start_datetime(cls, shift, work_date: date, event_time: datetime) -> datetime:
+    def _shift_start_datetime(
+        cls, shift, work_date: date, event_time: datetime
+    ) -> datetime:
         return cls._combine_shift_datetime(work_date, shift.start_time, event_time)
 
     @classmethod
-    def _shift_end_datetime(cls, shift, work_date: date, event_time: datetime) -> datetime:
+    def _shift_end_datetime(
+        cls, shift, work_date: date, event_time: datetime
+    ) -> datetime:
         value = cls._combine_shift_datetime(work_date, shift.end_time, event_time)
         if shift.is_overnight:
             value += timedelta(days=1)
@@ -82,7 +105,9 @@ class AttendanceService:
     @classmethod
     def _late_minutes(cls, shift, work_date: date, event_time: datetime) -> int:
         scheduled_start = cls._shift_start_datetime(shift, work_date, event_time)
-        grace_until = scheduled_start + timedelta(minutes=shift.late_threshold_minutes or 0)
+        grace_until = scheduled_start + timedelta(
+            minutes=shift.late_threshold_minutes or 0
+        )
         if event_time <= grace_until:
             return 0
         return max(0, int((event_time - scheduled_start).total_seconds() // 60))
@@ -90,7 +115,9 @@ class AttendanceService:
     @classmethod
     def _early_leave_minutes(cls, shift, work_date: date, event_time: datetime) -> int:
         scheduled_end = cls._shift_end_datetime(shift, work_date, event_time)
-        allowed_from = scheduled_end - timedelta(minutes=shift.early_leave_threshold_minutes or 0)
+        allowed_from = scheduled_end - timedelta(
+            minutes=shift.early_leave_threshold_minutes or 0
+        )
         if event_time >= allowed_from:
             return 0
         return max(0, int((scheduled_end - event_time).total_seconds() // 60))
@@ -101,7 +128,9 @@ class AttendanceService:
         return max(0, int(seconds // 60))
 
     @staticmethod
-    def _status_for_check_out(late_minutes: int, early_leave_minutes: int) -> AttendanceRecordStatus:
+    def _status_for_check_out(
+        late_minutes: int, early_leave_minutes: int
+    ) -> AttendanceRecordStatus:
         if late_minutes > 0 and early_leave_minutes > 0:
             return AttendanceRecordStatus.late_and_early_leave
         if early_leave_minutes > 0:
@@ -138,7 +167,9 @@ class AttendanceService:
 
         employee_status = await self.attendance_repo.get_employee_status(employee_id)
         if employee_status is None:
-            logger.warning("Attendance event employee not found: employee_id=%s", employee_id)
+            logger.warning(
+                "Attendance event employee not found: employee_id=%s", employee_id
+            )
             raise NotFoundException("Employee")
         if employee_status != EmployeeStatus.active:
             logger.info(
@@ -153,8 +184,14 @@ class AttendanceService:
             )
 
         cooldown_key = self._cooldown_key(employee_id)
-        cooldown_value = await self.redis.get(cooldown_key)
-        if cooldown_value is not None:
+        cooldown_token = uuid.uuid4().hex
+        acquired = await self.redis.set(
+            cooldown_key,
+            cooldown_token,
+            nx=True,
+            ex=COOLDOWN_SECONDS,
+        )
+        if not acquired:
             ttl = await self.redis.ttl(cooldown_key)
             logger.info(
                 "Attendance rejected by cooldown: employee_id=%s ttl=%s",
@@ -168,13 +205,52 @@ class AttendanceService:
                 cooldown_ttl_seconds=ttl if ttl and ttl > 0 else None,
             )
 
+        retain_cooldown = False
+        try:
+            response = await self._process_event_after_cooldown(
+                payload=payload,
+                event_time=event_time,
+                attendance_time=attendance_time,
+            )
+            retain_cooldown = response.accepted
+            return response
+        except IntegrityError:
+            try:
+                await self.attendance_repo.rollback()
+            except Exception:
+                logger.exception(
+                    "Failed to rollback attendance uniqueness conflict: employee_id=%s",
+                    employee_id,
+                )
+            logger.info(
+                "Attendance rejected by database uniqueness constraint: employee_id=%s work_date=%s",
+                employee_id,
+                attendance_time.date(),
+            )
+            return self._rejected_response(
+                employee_id=employee_id,
+                event_time=event_time,
+                reason=REASON_DUPLICATE_ATTENDANCE,
+            )
+        finally:
+            if not retain_cooldown:
+                await self._release_cooldown(cooldown_key, cooldown_token)
+
+    async def _process_event_after_cooldown(
+        self,
+        *,
+        payload: schemas.AttendanceAIEventCreate,
+        event_time: datetime,
+        attendance_time: datetime,
+    ) -> schemas.AttendanceEventAcceptedResponse:
+        employee_id = payload.employee_id
         event_date = attendance_time.date()
         record = await self.attendance_repo.get_open_overnight_record_for_checkout(
             employee_id=employee_id,
             event_date=event_date,
         )
         if record is not None:
-            work_date = record.work_date.date()
+            work_date = record.work_date
             shift = record.shift
         else:
             work_date = event_date
@@ -265,11 +341,15 @@ class AttendanceService:
             if record.shift_id is None:
                 record.shift_id = shift.shift_id
 
-            early_leave_minutes = self._early_leave_minutes(shift, work_date, attendance_time)
+            early_leave_minutes = self._early_leave_minutes(
+                shift, work_date, attendance_time
+            )
             record.check_out_time = event_time
             record.source = AttendanceSource.face_recognition
             record.early_leave_minutes = early_leave_minutes
-            record.worked_minutes = self._worked_minutes(record.check_in_time, event_time)
+            record.worked_minutes = self._worked_minutes(
+                record.check_in_time, event_time
+            )
             record.status = self._status_for_check_out(
                 late_minutes=record.late_minutes or 0,
                 early_leave_minutes=early_leave_minutes,
@@ -280,6 +360,8 @@ class AttendanceService:
             await self.attendance_repo.commit()
             await self.attendance_repo.refresh(event)
             await self.attendance_repo.refresh(record)
+        except IntegrityError:
+            raise
         except Exception as exc:
             try:
                 await self.attendance_repo.rollback()
@@ -298,11 +380,6 @@ class AttendanceService:
                 raise
             raise DatabaseException("Failed to create attendance event") from exc
 
-        await self.redis.set(
-            cooldown_key,
-            str(event.event_id or event_time.isoformat()),
-            ex=COOLDOWN_SECONDS,
-        )
         logger.info(
             "Attendance accepted: employee_id=%s event_id=%s record_id=%s event_type=%s",
             employee_id,
@@ -333,10 +410,17 @@ class AttendanceService:
     async def list_events(
         self,
         query: schemas.AttendanceEventListQuery,
+        *,
+        visible_employee_ids: set[uuid.UUID] | None = None,
     ) -> list[schemas.AttendanceEventRead]:
         try:
-            events = await self.attendance_repo.list_events(query)
-            return [schemas.AttendanceEventRead.model_validate(event) for event in events]
+            events = await self.attendance_repo.list_events(
+                query,
+                visible_employee_ids=visible_employee_ids,
+            )
+            return [
+                schemas.AttendanceEventRead.model_validate(event) for event in events
+            ]
         except AppException:
             raise
         except Exception as exc:
@@ -359,10 +443,18 @@ class AttendanceService:
     async def list_record(
         self,
         query: schemas.AttendanceRecordListQuery,
+        *,
+        visible_employee_ids: set[uuid.UUID] | None = None,
     ) -> list[schemas.AttendanceRecordRead]:
         try:
-            records = await self.attendance_repo.list_record(query)
-            return [schemas.AttendanceRecordRead.model_validate(record) for record in records]
+            records = await self.attendance_repo.list_record(
+                query,
+                visible_employee_ids=visible_employee_ids,
+            )
+            return [
+                schemas.AttendanceRecordRead.model_validate(record)
+                for record in records
+            ]
         except AppException:
             raise
         except Exception as exc:
@@ -385,9 +477,14 @@ class AttendanceService:
     async def summarize_records(
         self,
         query: schemas.AttendanceRecordSummaryQuery,
+        *,
+        visible_employee_ids: set[uuid.UUID] | None = None,
     ) -> schemas.AttendanceRecordSummaryRead:
         try:
-            summary = await self.attendance_repo.summarize_records(query)
+            summary = await self.attendance_repo.summarize_records(
+                query,
+                visible_employee_ids=visible_employee_ids,
+            )
             return schemas.AttendanceRecordSummaryRead(**summary)
         except AppException:
             raise
@@ -439,7 +536,9 @@ class AttendanceService:
         try:
             record = await self.attendance_repo.get_record_by_id(record_id)
             if record is None:
-                logger.warning("Attendance record not found for update: record_id=%s", record_id)
+                logger.warning(
+                    "Attendance record not found for update: record_id=%s", record_id
+                )
                 raise NotFoundException("Attendance record")
 
             self._validate_record_update(record, payload)
@@ -449,7 +548,9 @@ class AttendanceService:
         except AppException:
             raise
         except Exception as exc:
-            logger.exception("Failed to update attendance record: record_id=%s", record_id)
+            logger.exception(
+                "Failed to update attendance record: record_id=%s", record_id
+            )
             raise DatabaseException("Failed to update attendance record") from exc
 
 

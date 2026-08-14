@@ -1,10 +1,31 @@
 
-import insightface
 import numpy as np
+import torch
+import onnxruntime as ort
+import insightface
 from pathlib import Path
 from app.utils.setup_logger import setup_logger
 
 logger = setup_logger(__name__)
+
+
+def _onnx_providers(device: int) -> list[str]:
+    logger.info(
+        "Torch CUDA status: available=%s device_count=%s current_device=%s",
+        torch.cuda.is_available(),
+        torch.cuda.device_count(),
+        torch.cuda.current_device() if torch.cuda.is_available() else None,
+    )
+    available = ort.get_available_providers()
+    if device >= 0 and "CUDAExecutionProvider" in available:
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+    if device >= 0:
+        logger.warning(
+            "CUDAExecutionProvider is not available; falling back to CPU. available_providers=%s",
+            available,
+        )
+    return ["CPUExecutionProvider"]
 
 
 class Embedder:
@@ -13,12 +34,20 @@ class Embedder:
         model_weight: str | Path,  # path to arcface
         device: int = 0,
     ) -> None:
-        self.model = insightface.model_zoo.get_model(str(model_weight))
+        providers = _onnx_providers(device)
+        self.model = insightface.model_zoo.get_model(
+            str(model_weight),
+            providers=providers,
+        )
         ctx_id = device if device >= 0 else -1
         self.model.prepare(ctx_id=ctx_id)
+        session = getattr(self.model, "session", None)
+        active_providers = session.get_providers() if session is not None else providers
         logger.info(
-            "ArcFace model loaded (ctx_id=%s)",
+            "ArcFace model loaded (ctx_id=%s, requested_providers=%s, active_providers=%s)",
             ctx_id,
+            providers,
+            active_providers,
         )
 
     def get_embedding(self, aligned_face: np.ndarray) -> np.ndarray:

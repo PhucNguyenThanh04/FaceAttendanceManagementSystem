@@ -1,0 +1,103 @@
+@startuml
+!pragma layout smetana
+title HỆ THỐNG QUẢN LÝ CHẤM CÔNG KHUÔN MẶT
+
+left to right direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam actorStyle stickman
+skinparam ArrowColor #334155
+skinparam ArrowThickness 1
+skinparam ActorBorderColor #0F172A
+skinparam ActorFontColor #0F172A
+skinparam ActorFontStyle bold
+skinparam UsecaseBorderColor #475569
+skinparam UsecaseBackgroundColor white
+skinparam UsecaseFontColor #0F172A
+skinparam RectangleBorderColor #475569
+skinparam RectangleFontColor #0F172A
+skinparam RectangleFontStyle bold
+
+actor "Quản trị viên\n(Admin)" as Admin
+actor "Nhân sự\n(HR)" as HR
+
+rectangle " " {
+  together {
+    usecase "Quản lý tài khoản\n& phân quyền" as UC_A1
+    usecase "Xem nhân viên\ntrong team" as UC_M1
+  }
+
+  together {
+    usecase "Quản lý phòng ban, chức vụ,\nca làm & ngày lễ" as UC_A2
+    usecase "Xem ca & chấm công\ntrong team" as UC_M2
+  }
+
+  together {
+    usecase "Quản trị nhân viên, chấm công\n& báo cáo toàn hệ thống" as UC_A3
+    usecase "Sơ duyệt nghỉ phép &\nchuyển yêu cầu sửa công" as UC_M3
+  }
+
+  together {
+    usecase "Quản lý tài liệu RAG\n& xem audit log" as UC_A4
+    usecase "Xem báo cáo\nchấm công team" as UC_M4
+  }
+
+  together {
+    usecase "Quản lý nhân viên, onboarding\n& hồ sơ khuôn mặt" as UC_H1
+    usecase "Xem/cập nhật\nhồ sơ cá nhân" as UC_E1
+  }
+
+  together {
+    usecase "Phân ca & điều chỉnh\nbảng công" as UC_H2
+    usecase "Xem ca & lịch sử\nchấm công cá nhân" as UC_E2
+  }
+
+  together {
+    usecase "Phê duyệt cuối đơn nghỉ\n& yêu cầu sửa công" as UC_H3
+    usecase "Chấm công bằng\nkhuôn mặt" as UC_E3
+  }
+
+  together {
+    usecase "Xem báo cáo nhân sự\ntoàn công ty" as UC_H4
+    usecase "Gửi/hủy đơn nghỉ phép\n& yêu cầu sửa công" as UC_E4
+  }
+
+}
+
+actor "Quản lý\n(Manager)" as Manager
+actor "Nhân viên\n(Employee)" as Employee
+
+HR -[hidden]down- Admin
+Manager -[hidden]down- Employee
+Admin -[hidden]right- Manager
+HR -[hidden]right- Employee
+
+Admin -- UC_A1
+Admin -- UC_A2
+Admin -- UC_A3
+Admin -- UC_A4
+
+HR -- UC_H1
+HR -- UC_H2
+HR -- UC_H3
+HR -- UC_H4
+
+UC_M1 -- Manager
+UC_M2 -- Manager
+UC_M3 -- Manager
+UC_M4 -- Manager
+
+UC_E1 -- Employee
+UC_E2 -- Employee
+UC_E3 -- Employee
+UC_E4 -- Employee
+
+legend bottom
+  Chức năng chung cho cả 4 vai trò:
+  đăng nhập/đăng xuất, quản lý mật khẩu và sử dụng trợ lý AI.
+
+  Manager chỉ xem và xử lý dữ liệu trong phạm vi team được quản lý.
+endlegend
+
+@enduml

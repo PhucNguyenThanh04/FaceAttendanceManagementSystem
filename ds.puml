@@ -1,0 +1,121 @@
+@startuml
+title USE CASE BACK-OFFICE - HỆ THỐNG QUẢN LÝ CHẤM CÔNG
+
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Người dùng dashboard" as DashboardUser <<abstract>>
+actor "Quản trị viên\n(Admin)" as Admin
+actor "Nhân sự\n(HR)" as HR
+actor "Quản lý\n(Manager)" as Manager
+
+DashboardUser <|-- Admin
+DashboardUser <|-- HR
+DashboardUser <|-- Manager
+
+rectangle "HỆ THỐNG QUẢN LÝ CHẤM CÔNG KHUÔN MẶT" {
+  package "Dùng chung" {
+    usecase "Đăng nhập, đăng xuất\n& quản lý mật khẩu" as UC_Auth
+    usecase "Xem tổng quan\nvận hành" as UC_Dashboard
+    usecase "Hỏi đáp với\ntrợ lý AI" as UC_Chat
+  }
+
+  package "Tài khoản & tổ chức" {
+    usecase "Tra cứu tài khoản" as UC_UserRead
+    usecase "Quản lý tài khoản,\nrole & trạng thái" as UC_UserAdmin
+    usecase "Tra cứu phòng ban\n& chức vụ" as UC_OrgRead
+    usecase "Quản lý phòng ban\n& chức vụ" as UC_OrgManage
+  }
+
+  package "Nhân sự & khuôn mặt" {
+    usecase "Xem danh sách,\nhồ sơ nhân viên" as UC_EmployeeRead
+    usecase "Cập nhật/kích hoạt\nnhân viên" as UC_EmployeeEdit
+    usecase "Xóa nhân viên" as UC_EmployeeDelete
+    usecase "Onboard nhân viên\n& đăng ký khuôn mặt" as UC_Onboarding
+    usecase "Quản lý vòng đời\nhồ sơ khuôn mặt" as UC_FaceManage
+  }
+
+  package "Ca làm & chấm công" {
+    usecase "Xem mẫu ca\n& lịch phân ca" as UC_ShiftRead
+    usecase "Quản lý mẫu ca\n& ngày lễ" as UC_ShiftMaster
+    usecase "Phân/đổi/đóng ca\ncho nhân viên" as UC_ShiftAssign
+    usecase "Xem sự kiện\n& bảng công" as UC_AttendanceRead
+    usecase "Điều chỉnh\nbảng công chính thức" as UC_AttendanceEdit
+  }
+
+  package "Nghỉ phép & sửa công" {
+    usecase "Cấu hình loại phép" as UC_LeaveType
+    usecase "Sơ duyệt hoặc từ chối\nđơn nghỉ của team" as UC_LeaveManager
+    usecase "Phê duyệt cuối hoặc\n từ chối đơn nghỉ" as UC_LeaveFinal
+    usecase "Chuyển HR hoặc từ chối\nyêu cầu sửa công team" as UC_CorrectionManager
+    usecase "Xử lý cuối yêu cầu sửa công\n(duyệt thì cập nhật bảng công)" as UC_CorrectionFinal
+  }
+
+  package "Báo cáo & quản trị" {
+    usecase "Xem/xuất báo cáo\nchấm công" as UC_AttendanceReport
+    usecase "Xem báo cáo\nnghỉ phép" as UC_LeaveReport
+    usecase "Quản lý tài liệu RAG" as UC_Documents
+    usecase "Xem nhật ký kiểm toán" as UC_Audit
+  }
+}
+
+DashboardUser -- UC_Auth
+DashboardUser -- UC_Dashboard
+DashboardUser -- UC_Chat
+
+Admin -- UC_UserAdmin
+Admin -- UC_OrgManage
+Admin -- UC_EmployeeRead
+Admin -- UC_EmployeeEdit
+Admin -- UC_EmployeeDelete
+Admin -- UC_Onboarding
+Admin -- UC_FaceManage
+Admin -- UC_ShiftRead
+Admin -- UC_ShiftMaster
+Admin -- UC_ShiftAssign
+Admin -- UC_AttendanceRead
+Admin -- UC_AttendanceEdit
+Admin -- UC_LeaveType
+Admin -- UC_LeaveFinal
+Admin -- UC_CorrectionFinal
+Admin -- UC_AttendanceReport
+Admin -- UC_LeaveReport
+Admin -- UC_Documents
+Admin -- UC_Audit
+
+HR -- UC_UserRead
+HR -- UC_OrgRead
+HR -- UC_EmployeeRead
+HR -- UC_EmployeeEdit
+HR -- UC_Onboarding
+HR -- UC_FaceManage
+HR -- UC_ShiftRead
+HR -- UC_ShiftAssign
+HR -- UC_AttendanceRead
+HR -- UC_AttendanceEdit
+HR -- UC_LeaveType
+HR -- UC_LeaveFinal
+HR -- UC_CorrectionFinal
+HR -- UC_AttendanceReport
+HR -- UC_LeaveReport
+
+Manager -- UC_EmployeeRead
+Manager -- UC_ShiftRead
+Manager -- UC_AttendanceRead
+Manager -- UC_LeaveManager
+Manager -- UC_CorrectionManager
+Manager -- UC_AttendanceReport
+
+note right of UC_EmployeeRead
+  Phạm vi Manager:
+  - bản thân
+  - cấp dưới trực tiếp
+  - nhân viên thuộc phòng ban
+    được giao quản lý
+
+  Phạm vi này cũng áp dụng cho
+  ca, chấm công, phê duyệt
+  và báo cáo.
+end note
+
+@enduml

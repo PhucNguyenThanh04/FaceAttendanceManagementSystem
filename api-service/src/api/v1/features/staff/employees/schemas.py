@@ -86,6 +86,42 @@ class EmployeeUpdate(BaseModel):
         return self
 
 
+class EmployeeSelfUpdate(BaseModel):
+    """Fields an employee may update on their own profile."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    phone: str | None = Field(default=None, pattern=PHONE_PATTERN)
+    avatar_url: str | None = Field(default=None, max_length=500)
+    date_of_birth: date | None = None
+    gender: str | None = Field(default=None, max_length=20)
+    address: str | None = Field(default=None, max_length=500)
+
+    @field_validator("gender")
+    @classmethod
+    def validate_gender(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        lowered = value.strip().lower()
+        if lowered not in GENDER_ALLOWED:
+            raise ValueError("gender must be one of: male, female, other")
+        return lowered
+
+    @field_validator("avatar_url")
+    @classmethod
+    def validate_avatar_url(cls, value: str | None) -> str | None:
+        if value is not None and not value.startswith("/uploads/avatars/"):
+            raise ValueError("avatar_url must reference an uploaded avatar")
+        return value
+
+    @field_validator("date_of_birth")
+    @classmethod
+    def validate_date_of_birth(cls, value: date | None) -> date | None:
+        if value is not None and value > date.today():
+            raise ValueError("date_of_birth must not be in the future")
+        return value
+
+
 class EmployeeRead(AppTimezoneModel):
     model_config = ConfigDict(from_attributes=True)
 

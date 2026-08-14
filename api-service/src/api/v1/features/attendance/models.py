@@ -15,12 +15,21 @@ Hai bảng này có vai trò khác nhau:
 """
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import (
-    Boolean, DateTime, Enum, Float, ForeignKey,
-    Integer, String, Text, func,
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -40,6 +49,7 @@ if TYPE_CHECKING:
 
 # ── attendance_events ──────────────────────────────────────────────────────
 
+
 class AttendanceEvent(Base):
     """
     Raw event từ AI service — mỗi lần camera nhận diện = 1 record.
@@ -54,6 +64,7 @@ class AttendanceEvent(Base):
 
     raw_result: toàn bộ JSON response từ AI service — lưu để debug sau này.
     """
+
     __tablename__ = "attendance_events"
 
     event_id: Mapped[uuid.UUID] = mapped_column(
@@ -89,14 +100,13 @@ class AttendanceEvent(Base):
     # Media và raw data
     image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     raw_result: Mapped[Optional[dict]] = mapped_column(
-        JSONB, nullable=True,
+        JSONB,
+        nullable=True,
         comment="Full JSON response từ AI service",
     )
 
     # Acceptance
-    is_accepted: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    is_accepted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Chỉ có created_at (immutable log)
@@ -122,6 +132,7 @@ class AttendanceEvent(Base):
 
 # ── attendance_records ─────────────────────────────────────────────────────
 
+
 class AttendanceRecord(Base, TimestampMixin):
     """
     Bản ghi chấm công đã xử lý — "sổ công" chính thức.
@@ -140,7 +151,20 @@ class AttendanceRecord(Base, TimestampMixin):
       edited            = HR đã từng sửa bản ghi này
       system            = cron job tự động tạo (absent, holiday, on_leave)
     """
+
     __tablename__ = "attendance_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "employee_id",
+            "work_date",
+            name="uq_attendance_records_employee_work_date",
+        ),
+        Index(
+            "ix_attendance_records_work_date_status",
+            "work_date",
+            "status",
+        ),
+    )
 
     record_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -163,8 +187,8 @@ class AttendanceRecord(Base, TimestampMixin):
 
     # Ngày làm việc — date, không phải timestamp
     # (event_time có thể là timestamp bất kỳ, work_date là ngày quy ước)
-    work_date: Mapped[datetime] = mapped_column(
-        # dùng Date type từ sqlalchemy
+    work_date: Mapped[date] = mapped_column(
+        Date,
         nullable=False,
         index=True,
     )
@@ -202,7 +226,7 @@ class AttendanceRecord(Base, TimestampMixin):
     )
     shift: Mapped[Optional["WorkShift"]] = relationship(
         back_populates="attendance_records",
-        lazy="selectin",    # thường cần biết ca khi xem bảng công
+        lazy="selectin",  # thường cần biết ca khi xem bảng công
     )
     correction_requests: Mapped[List["AttendanceCorrectionRequest"]] = relationship(
         back_populates="attendance_record",

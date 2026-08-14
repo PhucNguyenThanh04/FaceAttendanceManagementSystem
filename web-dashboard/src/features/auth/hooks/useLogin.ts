@@ -11,17 +11,18 @@ export function useLogin() {
     mutationFn: async (payload: LoginPayload): Promise<LoginResult> => {
       const tokens = await authApi.login(payload)
       tokenStorage.setAccessToken(tokens.access_token)
+      tokenStorage.setRefreshToken(tokens.refresh_token)
 
       try {
         const user = await authApi.me()
         return { tokens, user }
       } catch (error) {
-        tokenStorage.clearAccessToken()
+        tokenStorage.clearSession()
         throw error
       }
     },
     onSuccess: ({ tokens, user }) => {
-      login({ accessToken: tokens.access_token, user })
+      login({ accessToken: tokens.access_token, refreshToken: tokens.refresh_token, user })
     },
   })
 }

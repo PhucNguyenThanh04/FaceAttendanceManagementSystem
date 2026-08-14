@@ -1,8 +1,9 @@
-import http
-from pathlib import Path
 from functools import lru_cache
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from fastapi_mail import ConnectionConfig
+
 BASE_DIR = Path(__file__).resolve().parents[3]
 
 
@@ -22,6 +23,9 @@ class Setting(BaseSettings):
     # AI service
     ai_service_base_url: str
     face_service_api_key: str
+
+    # Shared secret for trusted internal service-to-service endpoints.
+    internal_api_key: str = ""
 
     session_ttl_seconds: int
 
@@ -68,6 +72,8 @@ class Setting(BaseSettings):
     jwt_secret_key: str
     refresh_token_secret_key: str
     jwt_algorithm: str
+    jwt_issuer: str = "face-attendance-auth"
+    jwt_audience: str = "face-attendance-api"
     access_token_expire_minutes: int
     refresh_token_expire_days: int
 
@@ -83,10 +89,19 @@ class Setting(BaseSettings):
     otp_lock_minutes: int = 3
 
     # Bootstrap admin
-    bootstrap_admin_enabled: bool = True
+    bootstrap_admin_enabled: bool = False
     bootstrap_admin_email: str = ""
     bootstrap_admin_password: str = ""
     bootstrap_admin_full_name: str = ""
+
+    # Upload limits and local-storage quotas
+    upload_chunk_size_bytes: int = 64 * 1024
+    document_upload_max_bytes: int = 25 * 1024 * 1024
+    document_storage_quota_bytes: int = 2 * 1024 * 1024 * 1024
+    avatar_upload_max_bytes: int = 5 * 1024 * 1024
+    avatar_storage_quota_bytes: int = 512 * 1024 * 1024
+    onboarding_image_max_bytes: int = 5 * 1024 * 1024
+    onboarding_max_upload_attempts_per_session: int = 20
 
     # CORS
     cors_origins: str = ""

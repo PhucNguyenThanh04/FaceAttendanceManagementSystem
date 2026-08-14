@@ -9,5 +9,5 @@ type StatusMessageProps = {
 }
 
 export function StatusMessage({ children, tone = 'info' }: StatusMessageProps) {
-  return <div className={cx('status-message', `status-message--${tone}`)}>{children}</div>
+  return <div aria-live="polite" className={cx('status-message', `status-message--${tone}`)} role={tone === 'error' ? 'alert' : 'status'}>{children}</div>
 }

@@ -136,3 +136,10 @@ class CorrectionListQuery(BaseModel):
         if self.requested_from and self.requested_to and self.requested_to < self.requested_from:
             raise ValueError("requested_to must be on/after requested_from")
         return self
+
+
+class CorrectionListResponse(BaseModel):
+    items: list[AttendanceCorrectionRequestRead]
+    total: int
+    page: int
+    page_size: int

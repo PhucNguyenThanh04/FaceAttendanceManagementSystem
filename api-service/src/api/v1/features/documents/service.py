@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import mimetypes
 import re
 import uuid
 from pathlib import Path
@@ -14,17 +15,31 @@ from src.api.v1.features.documents.repository import (
     get_document_repository,
 )
 from src.api.v1.features.staff.models import Employee
+from src.api.v1.features.users.models import User
+from src.api.v1.shared.enums import RoleName
 from src.core.clients.chatbox.client import ChatboxClient
+from src.core.configs.settings import settings
 from src.core.dependencies.dep import get_chatbox_http_client
-from src.core.exceptions import BadRequestException, MLProcessingException
+from src.core.exceptions import (
+    BadRequestException,
+    ForbiddenException,
+    MLProcessingException,
+    NotFoundException,
+)
+from src.core.uploads.security import (
+    atomic_write_with_quota,
+    read_upload_limited,
+    validate_document_upload,
+)
 from src.utils.setup_logger import setup_logger
 
 logger = setup_logger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parents[5]
 UPLOAD_DIR = BASE_DIR / "uploads" / "documents"
-PUBLIC_UPLOAD_PREFIX = "/uploads/documents"
-MAX_DOCUMENT_SIZE = 25 * 1024 * 1024
+PROTECTED_DOWNLOAD_PREFIX = "/api/v1/documents"
+MAX_DOCUMENT_SIZE = settings.document_upload_max_bytes
+DOCUMENT_STORAGE_QUOTA = settings.document_storage_quota_bytes
 PENDING_QDRANT_COLLECTION = "pending"
 ALLOWED_EXTENSIONS = {".pdf", ".txt", ".docx"}
 
@@ -40,7 +55,42 @@ class DocumentService:
 
     @staticmethod
     def _to_read(document: Document) -> schemas.DocumentRead:
-        return schemas.DocumentRead.model_validate(document)
+        response = schemas.DocumentRead.model_validate(document)
+        return response.model_copy(
+            update={"file_url": (f"{PROTECTED_DOWNLOAD_PREFIX}/{document.id}/download")}
+        )
+
+    @staticmethod
+    def _storage_key(filename: str) -> str:
+        return f"documents/{filename}"
+
+    @staticmethod
+    def _resolve_document_path(filename: str) -> Path:
+        """Resolve a stored filename without allowing traversal or symlink escape."""
+        if not filename or Path(filename).name != filename:
+            raise NotFoundException("Document file")
+
+        storage_root = UPLOAD_DIR.resolve()
+        candidate = (storage_root / filename).resolve()
+        try:
+            candidate.relative_to(storage_root)
+        except ValueError as exc:
+            raise NotFoundException("Document file") from exc
+
+        if not candidate.is_file():
+            raise NotFoundException("Document file")
+        return candidate
+
+    @staticmethod
+    def _role_can_download(document: Document, current_user: User) -> bool:
+        if current_user.role_name == RoleName.admin:
+            return True
+        allowed_roles = {
+            role.strip().lower()
+            for role in document.allowed_roles
+            if role and role.strip()
+        }
+        return current_user.role_name.value in allowed_roles
 
     @staticmethod
     def _safe_filename(filename: str) -> str:
@@ -75,7 +125,9 @@ class DocumentService:
         try:
             path.unlink(missing_ok=True)
         except Exception:
-            logger.warning("Failed to delete local document file: path=%s", path, exc_info=True)
+            logger.warning(
+                "Failed to delete local document file: path=%s", path, exc_info=True
+            )
 
     async def upload_document(
         self,
@@ -91,20 +143,29 @@ class DocumentService:
 
         normalized_allowed_roles = self._normalize_allowed_roles(allowed_roles)
         safe_original_filename = self._safe_filename(file.filename or "")
-        file_bytes = await file.read()
-        if not file_bytes:
-            raise BadRequestException("Empty file is not allowed")
-        if len(file_bytes) > MAX_DOCUMENT_SIZE:
-            raise BadRequestException("File size must be less than 25MB")
+        file_bytes = await read_upload_limited(
+            file,
+            max_bytes=MAX_DOCUMENT_SIZE,
+            chunk_size=settings.upload_chunk_size_bytes,
+        )
+        validated_upload = validate_document_upload(
+            filename=safe_original_filename,
+            declared_media_type=file.content_type,
+            content=file_bytes,
+        )
 
         document_id = uuid.uuid4()
-        stored_filename = f"{document_id}_{safe_original_filename}"
+        stored_filename = f"{document_id}{validated_upload.extension}"
         local_path = UPLOAD_DIR / stored_filename
-        public_file_path = f"{PUBLIC_UPLOAD_PREFIX}/{stored_filename}"
-        file_type = Path(safe_original_filename).suffix.lower().lstrip(".")
+        storage_key = self._storage_key(stored_filename)
+        file_type = validated_upload.extension.lstrip(".")
 
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        local_path.write_bytes(file_bytes)
+        await atomic_write_with_quota(
+            storage_root=UPLOAD_DIR,
+            destination=local_path,
+            content=validated_upload.content,
+            quota_bytes=DOCUMENT_STORAGE_QUOTA,
+        )
 
         document_created = False
         rag_cleanup_needed = False
@@ -113,7 +174,7 @@ class DocumentService:
                 document_id=document_id,
                 title=normalized_title,
                 file_name=stored_filename,
-                file_url=public_file_path,
+                file_url=storage_key,
                 file_type=file_type,
                 uploaded_by=current_employee.employee_id,
                 allowed_roles=normalized_allowed_roles,
@@ -125,11 +186,11 @@ class DocumentService:
             ingest_result = await self.chatbox_client.ingest_document(
                 document_id=str(document_id),
                 filename=stored_filename,
-                file_path=public_file_path,
+                file_path=storage_key,
                 allowed_roles=normalized_allowed_roles,
-                file_bytes=file_bytes,
+                file_bytes=validated_upload.content,
                 upload_filename=stored_filename,
-                content_type=file.content_type or "application/octet-stream",
+                content_type=validated_upload.media_type,
             )
 
             document = await self.document_repository.mark_ready(
@@ -181,6 +242,24 @@ class DocumentService:
         document = await self.document_repository.get_document_or_404(document_id)
         return self._to_read(document)
 
+    async def get_document_download(
+        self,
+        *,
+        document_id: uuid.UUID,
+        current_user: User,
+    ) -> tuple[Path, str, str]:
+        document = await self.document_repository.get_document_or_404(document_id)
+        if not self._role_can_download(document, current_user):
+            raise ForbiddenException("You do not have access to this document")
+
+        local_path = self._resolve_document_path(document.file_name)
+        media_type = mimetypes.guess_type(document.file_name)[0]
+        return (
+            local_path,
+            Path(document.file_name).name,
+            media_type or "application/octet-stream",
+        )
+
     async def list_documents(self, query: schemas.DocumentListQuery) -> dict:
         documents, total = await self.document_repository.list_documents(query)
         return {
@@ -190,12 +269,57 @@ class DocumentService:
             "page_size": query.page_size,
         }
 
+    async def update_document(
+        self,
+        document_id: uuid.UUID,
+        payload: schemas.DocumentUpdate,
+    ) -> schemas.DocumentRead:
+        document = await self.document_repository.get_document_or_404(document_id)
+
+        if (
+            payload.allowed_roles is not None
+            and payload.allowed_roles != document.allowed_roles
+        ):
+            local_path = self._resolve_document_path(document.file_name)
+
+            try:
+                ingest_result = await self.chatbox_client.ingest_document(
+                    document_id=str(document.id),
+                    filename=document.file_name,
+                    file_path=self._storage_key(document.file_name),
+                    allowed_roles=payload.allowed_roles,
+                    file_bytes=local_path.read_bytes(),
+                    upload_filename=document.file_name,
+                    content_type="application/octet-stream",
+                )
+                if ingest_result.status != "ready" or not ingest_result.vector_indexed:
+                    raise ValueError(
+                        ingest_result.message
+                        or "RAG did not finish updating document metadata"
+                    )
+            except (httpx.HTTPError, ValueError) as exc:
+                logger.exception(
+                    "Failed to update document vector metadata: document_id=%s",
+                    document_id,
+                )
+                raise MLProcessingException(
+                    step="rag_document_metadata_update",
+                    reason=str(exc),
+                    task_id=str(document_id),
+                ) from exc
+
+        updated = await self.document_repository.update_document(document, payload)
+        logger.info("Document metadata updated: document_id=%s", document_id)
+        return self._to_read(updated)
+
     async def delete_document(self, document_id: uuid.UUID) -> None:
         document = await self.document_repository.get_document_or_404(document_id)
         try:
             await self.chatbox_client.delete_document_vectors(str(document_id))
         except (httpx.HTTPError, ValueError) as exc:
-            logger.exception("Failed to delete document vectors: document_id=%s", document_id)
+            logger.exception(
+                "Failed to delete document vectors: document_id=%s", document_id
+            )
             raise MLProcessingException(
                 step="rag_document_delete",
                 reason=str(exc),
@@ -203,8 +327,15 @@ class DocumentService:
             ) from exc
 
         await self.document_repository.delete_document(document_id)
-        local_path = UPLOAD_DIR / document.file_name
-        self._delete_local_file(local_path)
+        try:
+            local_path = self._resolve_document_path(document.file_name)
+        except NotFoundException:
+            logger.warning(
+                "Document record deleted but local file was missing or unsafe: document_id=%s",
+                document_id,
+            )
+        else:
+            self._delete_local_file(local_path)
 
 
 def get_document_service(

@@ -5,12 +5,13 @@ from datetime import date
 
 from fastapi import Depends
 from sqlalchemy import Select, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.api.v1.features.staff.models import Employee
 from src.api.v1.features.shifts import schemas
-from src.api.v1.features.shifts.models import EmployeeShiftAssignment, WorkShift
+from src.api.v1.features.shifts.models import EmployeeShiftAssignment, Holiday, WorkShift
 from src.core.db.database import get_db
 from src.utils.exeptions import ConflictException, DatabaseException, NotFoundException
 from src.utils.setup_logger import setup_logger
@@ -28,6 +29,146 @@ class WorkShiftRepo:
             return None
         normalized = value.strip()
         return normalized or None
+
+    async def list_holidays(
+        self,
+        query: schemas.HolidayListQuery,
+    ) -> list[Holiday]:
+        try:
+            stmt: Select = select(Holiday)
+
+            if query.year is not None:
+                stmt = stmt.where(
+                    Holiday.holiday_date >= date(query.year, 1, 1),
+                    Holiday.holiday_date <= date(query.year, 12, 31),
+                )
+            if query.date_from is not None:
+                stmt = stmt.where(Holiday.holiday_date >= query.date_from)
+            if query.date_to is not None:
+                stmt = stmt.where(Holiday.holiday_date <= query.date_to)
+
+            stmt = stmt.order_by(Holiday.holiday_date.asc(), Holiday.holiday_id.asc())
+            result = await self.db.execute(stmt)
+            return list(result.scalars().all())
+        except Exception as exc:
+            logger.exception("Failed to list holidays")
+            raise DatabaseException("Failed to list holidays") from exc
+
+    async def get_holiday_by_id(self, holiday_id: int) -> Holiday | None:
+        try:
+            stmt = select(Holiday).where(Holiday.holiday_id == holiday_id)
+            return await self.db.scalar(stmt)
+        except Exception as exc:
+            logger.exception("Failed to get holiday: holiday_id=%s", holiday_id)
+            raise DatabaseException("Failed to get holiday") from exc
+
+    async def holiday_date_exists(
+        self,
+        holiday_date: date,
+        exclude_holiday_id: int | None = None,
+    ) -> bool:
+        try:
+            stmt = select(Holiday.holiday_id).where(
+                Holiday.holiday_date == holiday_date
+            )
+            if exclude_holiday_id is not None:
+                stmt = stmt.where(Holiday.holiday_id != exclude_holiday_id)
+            return (await self.db.execute(stmt)).first() is not None
+        except Exception as exc:
+            logger.exception(
+                "Failed to check holiday date: holiday_date=%s",
+                holiday_date,
+            )
+            raise DatabaseException("Failed to check holiday date") from exc
+
+    async def create_holiday(self, payload: schemas.HolidayCreate) -> Holiday:
+        holiday = Holiday(
+            name=payload.name.strip(),
+            holiday_date=payload.holiday_date,
+            description=self._normalize_optional(payload.description),
+        )
+        self.db.add(holiday)
+
+        try:
+            await self.db.commit()
+            await self.db.refresh(holiday)
+            return holiday
+        except IntegrityError as exc:
+            await self.db.rollback()
+            logger.warning(
+                "Holiday date conflict: holiday_date=%s",
+                payload.holiday_date,
+            )
+            raise ConflictException("A holiday already exists on this date") from exc
+        except Exception as exc:
+            await self.db.rollback()
+            logger.exception(
+                "Failed to create holiday: name=%s holiday_date=%s",
+                payload.name,
+                payload.holiday_date,
+            )
+            raise DatabaseException("Failed to create holiday") from exc
+
+    async def update_holiday(
+        self,
+        holiday: Holiday,
+        payload: schemas.HolidayUpdate,
+    ) -> Holiday:
+        holiday_id = holiday.holiday_id
+        changed = False
+
+        if payload.name is not None:
+            normalized_name = payload.name.strip()
+            if holiday.name != normalized_name:
+                holiday.name = normalized_name
+                changed = True
+
+        if (
+            payload.holiday_date is not None
+            and holiday.holiday_date != payload.holiday_date
+        ):
+            holiday.holiday_date = payload.holiday_date
+            changed = True
+
+        if "description" in payload.model_fields_set:
+            normalized_description = self._normalize_optional(payload.description)
+            if holiday.description != normalized_description:
+                holiday.description = normalized_description
+                changed = True
+
+        if changed:
+            try:
+                await self.db.commit()
+                await self.db.refresh(holiday)
+            except IntegrityError as exc:
+                await self.db.rollback()
+                logger.warning(
+                    "Holiday date conflict on update: holiday_id=%s holiday_date=%s",
+                    holiday_id,
+                    payload.holiday_date,
+                )
+                raise ConflictException(
+                    "A holiday already exists on this date"
+                ) from exc
+            except Exception as exc:
+                await self.db.rollback()
+                logger.exception(
+                    "Failed to update holiday: holiday_id=%s",
+                    holiday_id,
+                )
+                raise DatabaseException("Failed to update holiday") from exc
+
+        return holiday
+
+    async def delete_holiday(self, holiday: Holiday) -> None:
+        holiday_id = holiday.holiday_id
+        try:
+            await self.db.delete(holiday)
+            await self.db.commit()
+        except Exception as exc:
+            await self.db.rollback()
+            logger.exception("Failed to delete holiday: holiday_id=%s", holiday_id)
+            raise DatabaseException("Failed to delete holiday") from exc
 
     async def name_exists(self, name: str | None, exclude_shift_id: int | None = None) -> bool:
         normalized_name = self._normalize_optional(name)

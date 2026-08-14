@@ -5,9 +5,13 @@ from fastapi import Depends
 from src.api.v1.features.users import schemas as user_schemas
 from src.api.v1.features.users.user_repo import UserRepo, get_user_repo
 from src.core.security.authentication import hash_password, verify_password
-from src.utils.exeptions import BadRequestException, ConflictException, NotFoundException
 from src.api.v1.shared.enums import RoleName, UserStatus
-
+from src.utils.exeptions import (
+    BadRequestException,
+    ConflictException,
+    ForbiddenException,
+    NotFoundException,
+)
 from src.utils.setup_logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -24,7 +28,9 @@ class UserService:
     async def email_exists(self, email: str) -> bool:
         return await self.user_repo.email_exists(email)
 
-    async def create_user(self, email: str, password_hash: str, role_name: RoleName, status: UserStatus) -> user_schemas.UserRead :
+    async def create_user(
+        self, email: str, password_hash: str, role_name: RoleName, status: UserStatus
+    ) -> user_schemas.UserRead:
         if await self.email_exists(email=email):
             raise ConflictException("Email already exists")
 
@@ -70,54 +76,164 @@ class UserService:
             "page_size": query.page_size,
         }
 
-    async def update_user(
+    @staticmethod
+    def _ensure_can_update_profile(actor, target) -> None:
+        if actor.user_id == target.user_id or actor.role_name == RoleName.admin:
+            return
+        if actor.role_name == RoleName.hr and target.role_name in {
+            RoleName.manager,
+            RoleName.employee,
+        }:
+            return
+        raise ForbiddenException("cannot_manage_equal_or_higher_role")
+
+    @staticmethod
+    def _ensure_admin(actor) -> None:
+        if actor.role_name != RoleName.admin:
+            raise ForbiddenException("Only an administrator can perform this action")
+
+    async def _get_locked_user(self, user_id: UUID):
+        user = await self.user_repo.get_user_for_update(user_id)
+        if user is None:
+            raise NotFoundException("User")
+        return user
+
+    @staticmethod
+    def _ensure_not_last_active_admin(
+        target,
+        active_admin_ids: list[UUID],
+        *,
+        next_role: RoleName | None = None,
+        next_status: UserStatus | None = None,
+    ) -> None:
+        removes_active_admin = (
+            target.role_name == RoleName.admin
+            and target.status == UserStatus.active
+            and (
+                (next_role is not None and next_role != RoleName.admin)
+                or (next_status is not None and next_status != UserStatus.active)
+            )
+        )
+        if removes_active_admin and len(active_admin_ids) <= 1:
+            raise ConflictException("The last active administrator cannot be changed")
+
+    async def update_profile(
         self,
         user_id: UUID,
-        payload: user_schemas.UserUpdate,
+        payload: user_schemas.UserProfileUpdate,
+        actor,
     ) -> user_schemas.UserRead:
-        password_hash = hash_password(payload.password) if payload.password else None
-        user = await self.user_repo.update_user(
-            user_id=user_id,
-            email=payload.email,
-            status=payload.status,
-            role_name=payload.role_name,
-            password_hash=password_hash,
+        target = await self.user_repo.get_user_or_404(user_id)
+        self._ensure_can_update_profile(actor, target)
+        user = await self.user_repo.update_profile(user_id=user_id, email=payload.email)
+        logger.info(
+            "User profile updated: user_id=%s actor_id=%s", user_id, actor.user_id
         )
-        logger.info("User updated: user_id=%s", user_id)
         return self._to_read(user)
 
     async def change_password(
         self,
         user_id: UUID,
         payload: user_schemas.ChangePasswordRequest,
+        actor,
     ) -> user_schemas.UserRead:
-        existing_user = await self.user_repo.get_user_by_id(user_id)
+        if actor.user_id != user_id:
+            raise ForbiddenException("You can only change your own password")
+
+        existing_user = await self.user_repo.get_user_for_update(user_id)
         if existing_user is None:
             logger.warning("Change password user not found: user_id=%s", user_id)
             raise NotFoundException("User")
 
         if not verify_password(payload.old_password, existing_user.password_hash):
-            logger.warning("Change password rejected: wrong current password user_id=%s", user_id)
+            logger.warning(
+                "Change password rejected: wrong current password user_id=%s", user_id
+            )
             raise BadRequestException("Current password is incorrect")
 
         new_hash = hash_password(payload.new_password)
-        updated_user = await self.user_repo.update_password(user_id=user_id, password_hash=new_hash)
+        updated_user = await self.user_repo.apply_security_update(
+            existing_user,
+            password_hash=new_hash,
+        )
         logger.info("Password changed: user_id=%s", user_id)
         return self._to_read(updated_user)
+
+    async def admin_reset_password(
+        self,
+        user_id: UUID,
+        payload: user_schemas.AdminPasswordReset,
+        actor,
+    ) -> user_schemas.UserRead:
+        self._ensure_admin(actor)
+        if actor.user_id == user_id:
+            raise ForbiddenException("Use the self-service password change endpoint")
+        target = await self._get_locked_user(user_id)
+        updated = await self.user_repo.apply_security_update(
+            target,
+            password_hash=hash_password(payload.new_password),
+        )
+        logger.info(
+            "Password reset by admin: user_id=%s actor_id=%s", user_id, actor.user_id
+        )
+        return self._to_read(updated)
 
     async def assign_role(
         self,
         user_id: UUID,
-        payload: user_schemas.UserRoleAssignRequest,
+        payload: user_schemas.RoleAssignmentRequest,
+        actor,
     ) -> user_schemas.UserRead:
-        user = await self.user_repo.set_role(user_id=user_id, role_name=payload.role_name)
+        self._ensure_admin(actor)
+        if actor.user_id == user_id:
+            raise ForbiddenException("Users cannot change their own role")
+
+        active_admin_ids = await self.user_repo.lock_active_admin_ids()
+        target = await self._get_locked_user(user_id)
+        self._ensure_not_last_active_admin(
+            target,
+            active_admin_ids,
+            next_role=payload.role_name,
+        )
+        user = await self.user_repo.apply_security_update(
+            target,
+            role_name=payload.role_name,
+        )
         logger.info("Role assigned: user_id=%s role=%s", user_id, payload.role_name)
         return self._to_read(user)
 
-    async def deactivate_user(self, user_id: UUID) -> user_schemas.UserRead:
-        user = await self.user_repo.soft_delete_user(user_id)
-        logger.info("User deactivated: user_id=%s", user_id)
+    async def update_status(
+        self,
+        user_id: UUID,
+        payload: user_schemas.UserStatusUpdate,
+        actor,
+    ) -> user_schemas.UserRead:
+        self._ensure_admin(actor)
+        if actor.user_id == user_id and payload.status != UserStatus.active:
+            raise ForbiddenException("Administrators cannot disable their own account")
+
+        active_admin_ids = await self.user_repo.lock_active_admin_ids()
+        target = await self._get_locked_user(user_id)
+        self._ensure_not_last_active_admin(
+            target,
+            active_admin_ids,
+            next_status=payload.status,
+        )
+        user = await self.user_repo.apply_security_update(target, status=payload.status)
+        logger.info(
+            "User status updated: user_id=%s status=%s actor_id=%s",
+            user_id,
+            payload.status,
+            actor.user_id,
+        )
         return self._to_read(user)
+
+    async def deactivate_user(self, user_id: UUID, actor) -> user_schemas.UserRead:
+        return await self.update_status(
+            user_id,
+            user_schemas.UserStatusUpdate(status=UserStatus.inactive),
+            actor,
+        )
 
     async def delete_user(self, user_id: UUID) -> None:
         deleted = await self.user_repo.delete_user(user_id)

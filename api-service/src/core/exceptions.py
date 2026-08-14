@@ -55,6 +55,48 @@ class UnprocessableEntityException(AppException):
         super().__init__(message, status_code=422, error_code="UNPROCESSABLE_ENTITY", detail=detail)
 
 
+class PayloadTooLargeException(AppException):
+    def __init__(
+        self,
+        message: str = "Payload too large",
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            status_code=413,
+            error_code="PAYLOAD_TOO_LARGE",
+            detail=detail,
+        )
+
+
+class StorageQuotaExceededException(AppException):
+    def __init__(
+        self,
+        message: str = "Storage quota exceeded",
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            status_code=507,
+            error_code="STORAGE_QUOTA_EXCEEDED",
+            detail=detail,
+        )
+
+
+class UploadQuotaExceededException(AppException):
+    def __init__(
+        self,
+        message: str = "Upload quota exceeded",
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            status_code=429,
+            error_code="UPLOAD_QUOTA_EXCEEDED",
+            detail=detail,
+        )
+
+
 # Backwards-compatible aliases/classes used by the current codebase.
 class ValidationException(UnprocessableEntityException):
     def __init__(self, message: str = "Validation error", detail: dict[str, Any] | None = None) -> None:

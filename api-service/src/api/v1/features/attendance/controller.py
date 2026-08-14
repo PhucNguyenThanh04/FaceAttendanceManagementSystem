@@ -13,9 +13,13 @@ from src.api.v1.features.attendance.service import (
 from src.api.v1.features.users.models import User
 from src.api.v1.shared.enums import RoleName
 from src.core.dependencies.auth import (
-    get_current_user_or_rag_api_key,
+    get_current_user,
     require_roles,
     verify_api_key_attendance,
+)
+from src.core.security.authorization import (
+    AuthorizationPolicy,
+    get_authorization_policy,
 )
 
 router = APIRouter(prefix="/attendance", tags=["Attendance"])
@@ -37,45 +41,81 @@ async def create_attendance_event(
 async def list_attendance_events(
     query: schemas.AttendanceEventListQuery = Depends(),
     service: AttendanceService = Depends(get_attendance_read_service),
-    _: User = Depends(get_current_user_or_rag_api_key),
+    current_user: User = Depends(get_current_user),
+    policy: AuthorizationPolicy = Depends(get_authorization_policy),
 ) -> list[schemas.AttendanceEventRead]:
-    return await service.list_events(query)
+    visible_employee_ids = await policy.scope_for_employee_query(
+        current_user,
+        query.employee_id,
+    )
+    return await service.list_events(
+        query,
+        visible_employee_ids=visible_employee_ids,
+    )
 
 
 @router.get("/events/{event_id}", response_model=schemas.AttendanceEventRead)
 async def get_attendance_event(
     event_id: uuid.UUID,
     service: AttendanceService = Depends(get_attendance_read_service),
-    _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
+    current_user: User = Depends(
+        require_roles(RoleName.admin, RoleName.hr, RoleName.manager, RoleName.employee)
+    ),
+    policy: AuthorizationPolicy = Depends(get_authorization_policy),
 ) -> schemas.AttendanceEventRead:
-    return await service.get_event(event_id)
+    event = await service.get_event(event_id)
+    await policy.ensure_can_view_employee(current_user, event.employee_id)
+    return event
 
 
 @router.get("/records", response_model=list[schemas.AttendanceRecordRead])
 async def list_attendance_records(
     query: schemas.AttendanceRecordListQuery = Depends(),
     service: AttendanceService = Depends(get_attendance_read_service),
-    _: User = Depends(get_current_user_or_rag_api_key),
+    current_user: User = Depends(get_current_user),
+    policy: AuthorizationPolicy = Depends(get_authorization_policy),
 ) -> list[schemas.AttendanceRecordRead]:
-    return await service.list_record(query)
+    visible_employee_ids = await policy.scope_for_employee_query(
+        current_user,
+        query.employee_id,
+    )
+    return await service.list_record(
+        query,
+        visible_employee_ids=visible_employee_ids,
+    )
 
 
 @router.get("/records/summary", response_model=schemas.AttendanceRecordSummaryRead)
 async def summarize_attendance_records(
     query: schemas.AttendanceRecordSummaryQuery = Depends(),
     service: AttendanceService = Depends(get_attendance_read_service),
-    _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
+    current_user: User = Depends(
+        require_roles(RoleName.admin, RoleName.hr, RoleName.manager, RoleName.employee)
+    ),
+    policy: AuthorizationPolicy = Depends(get_authorization_policy),
 ) -> schemas.AttendanceRecordSummaryRead:
-    return await service.summarize_records(query)
+    visible_employee_ids = await policy.scope_for_employee_query(
+        current_user,
+        query.employee_id,
+    )
+    return await service.summarize_records(
+        query,
+        visible_employee_ids=visible_employee_ids,
+    )
 
 
 @router.get("/records/{record_id}", response_model=schemas.AttendanceRecordRead)
 async def get_attendance_record(
     record_id: uuid.UUID,
     service: AttendanceService = Depends(get_attendance_read_service),
-    _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
+    current_user: User = Depends(
+        require_roles(RoleName.admin, RoleName.hr, RoleName.manager, RoleName.employee)
+    ),
+    policy: AuthorizationPolicy = Depends(get_authorization_policy),
 ) -> schemas.AttendanceRecordRead:
-    return await service.get_record(record_id)
+    record = await service.get_record(record_id)
+    await policy.ensure_can_view_employee(current_user, record.employee_id)
+    return record
 
 
 @router.patch("/records/{record_id}", response_model=schemas.AttendanceRecordRead)

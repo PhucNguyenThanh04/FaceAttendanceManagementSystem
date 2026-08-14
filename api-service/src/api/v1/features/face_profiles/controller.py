@@ -17,37 +17,65 @@ router = APIRouter(prefix="/face-profiles", tags=["Face Profiles"])
 async def get_face_profile_by_employee(
     employee_id: uuid.UUID,
     service: FaceProfileService = Depends(get_face_profile_service),
-    _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
+    current_user: User = Depends(
+        require_roles(
+            RoleName.admin,
+            RoleName.hr,
+            RoleName.manager,
+            RoleName.employee,
+        )
+    ),
 ) -> schemas.FaceProfileRead:
-    return await service.get_face_profile_by_employee(employee_id)
+    return await service.get_face_profile_by_employee(
+        employee_id,
+        current_user=current_user,
+    )
 
 
 @router.get("/{profile_id}", response_model=schemas.FaceProfileRead)
 async def get_face_profile(
     profile_id: uuid.UUID,
     service: FaceProfileService = Depends(get_face_profile_service),
-    _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
+    current_user: User = Depends(
+        require_roles(
+            RoleName.admin,
+            RoleName.hr,
+            RoleName.manager,
+            RoleName.employee,
+        )
+    ),
 ) -> schemas.FaceProfileRead:
-    return await service.get_face_profile(profile_id)
+    return await service.get_face_profile(profile_id, current_user=current_user)
 
 
 @router.get("/", response_model=dict)
 async def list_face_profiles(
     query: schemas.FaceProfileListQuery = Depends(),
     service: FaceProfileService = Depends(get_face_profile_service),
-    _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
+    current_user: User = Depends(
+        require_roles(
+            RoleName.admin,
+            RoleName.hr,
+            RoleName.manager,
+            RoleName.employee,
+        )
+    ),
 ) -> dict:
-    return await service.list_face_profiles(query)
+    return await service.list_face_profiles(query, current_user=current_user)
 
 
 @router.patch("/{profile_id}", response_model=schemas.FaceProfileRead)
 async def update_face_profile(
     profile_id: uuid.UUID,
-    payload: schemas.FaceProfileUpdate,
+    payload: schemas.FaceProfileLifecycleUpdate,
     service: FaceProfileService = Depends(get_face_profile_service),
-    _: User = Depends(require_roles(RoleName.admin, RoleName.hr)),
+    current_user: User = Depends(require_roles(RoleName.admin, RoleName.hr)),
 ) -> schemas.FaceProfileRead:
-    return await service.update_face_profile(profile_id, payload)
+    return await service.update_face_profile_for_actor(
+        profile_id,
+        schemas.FaceProfileUpdate(status=payload.status),
+        current_user=current_user,
+    )
 
 
 @router.post("/{profile_id}/revoke", response_model=schemas.FaceProfileRead)
@@ -55,7 +83,10 @@ async def revoke_face_profile(
     profile_id: uuid.UUID,
     payload: schemas.RevokeFaceProfileRequest,
     service: FaceProfileService = Depends(get_face_profile_service),
-    _: User = Depends(require_roles(RoleName.admin, RoleName.hr)),
+    current_user: User = Depends(require_roles(RoleName.admin, RoleName.hr)),
 ) -> schemas.FaceProfileRead:
-    return await service.revoke_face_profile(profile_id, payload)
-
+    return await service.revoke_face_profile(
+        profile_id,
+        payload,
+        current_user=current_user,
+    )

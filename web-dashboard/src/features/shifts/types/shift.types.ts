@@ -67,3 +67,14 @@ export type ChangeShiftPayload = {
   effective_date: string
   reason: string | null
 }
+
+export type Holiday = {
+  holiday_id: number
+  name: string
+  holiday_date: string
+  description: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type HolidayPayload = Pick<Holiday, 'holiday_date' | 'name'> & { description?: string | null }

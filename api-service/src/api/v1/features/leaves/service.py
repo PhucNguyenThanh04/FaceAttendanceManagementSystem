@@ -8,7 +8,16 @@ from fastapi import Depends
 from src.api.v1.features.leaves import schemas
 from src.api.v1.features.leaves.repo import LeaveRepo, get_leave_repo
 from src.api.v1.features.users.models import User
-from src.api.v1.shared.enums import ApprovalAction, LeaveRequestStatus, LeaveTimeType, RoleName
+from src.api.v1.shared.enums import (
+    ApprovalAction,
+    LeaveRequestStatus,
+    LeaveTimeType,
+    RoleName,
+)
+from src.core.security.authorization import (
+    AuthorizationPolicy,
+    get_authorization_policy,
+)
 from src.utils.exeptions import (
     AppException,
     ConflictException,
@@ -23,8 +32,13 @@ logger = setup_logger(__name__)
 
 
 class LeaveService:
-    def __init__(self, leave_repo: LeaveRepo):
+    def __init__(
+        self,
+        leave_repo: LeaveRepo,
+        authorization_policy: AuthorizationPolicy,
+    ):
         self.leave_repo = leave_repo
+        self.authorization_policy = authorization_policy
 
     @staticmethod
     def _to_read(leave_request) -> schemas.LeaveRequestRead:
@@ -46,7 +60,9 @@ class LeaveService:
             return 0.5
         if payload.time_type == LeaveTimeType.custom:
             if payload.total_days is None:
-                raise ValidationException("total_days is required when time_type=custom")
+                raise ValidationException(
+                    "total_days is required when time_type=custom"
+                )
             return payload.total_days
 
         holidays = await self.leave_repo.list_holiday_dates(
@@ -59,7 +75,9 @@ class LeaveService:
             if day.weekday() < 5 and day not in holidays
         )
         if working_days <= 0:
-            raise ValidationException("Leave request must include at least one working day")
+            raise ValidationException(
+                "Leave request must include at least one working day"
+            )
         return float(working_days)
 
     async def list_leave_types(self) -> list[schemas.LeaveTypeRead]:
@@ -83,7 +101,9 @@ class LeaveService:
                 raise ConflictException("Leave type code already exists")
 
             leave_type = await self.leave_repo.create_leave_type(payload)
-            logger.info("Leave type created: leave_type_id=%s", leave_type.leave_type_id)
+            logger.info(
+                "Leave type created: leave_type_id=%s", leave_type.leave_type_id
+            )
             return self._leave_type_to_read(leave_type)
         except AppException:
             raise
@@ -99,18 +119,26 @@ class LeaveService:
         try:
             leave_type = await self.leave_repo.get_leave_type_by_id(leave_type_id)
             if leave_type is None:
-                logger.warning("Leave type not found for update: leave_type_id=%s", leave_type_id)
+                logger.warning(
+                    "Leave type not found for update: leave_type_id=%s", leave_type_id
+                )
                 raise NotFoundException("Leave type")
 
-            if payload.name is not None and await self.leave_repo.leave_type_name_exists(
-                payload.name,
-                exclude_leave_type_id=leave_type_id,
+            if (
+                payload.name is not None
+                and await self.leave_repo.leave_type_name_exists(
+                    payload.name,
+                    exclude_leave_type_id=leave_type_id,
+                )
             ):
                 raise ConflictException("Leave type name already exists")
 
-            if "code" in payload.model_fields_set and await self.leave_repo.leave_type_code_exists(
-                payload.code,
-                exclude_leave_type_id=leave_type_id,
+            if (
+                "code" in payload.model_fields_set
+                and await self.leave_repo.leave_type_code_exists(
+                    payload.code,
+                    exclude_leave_type_id=leave_type_id,
+                )
             ):
                 raise ConflictException("Leave type code already exists")
 
@@ -120,7 +148,9 @@ class LeaveService:
         except AppException:
             raise
         except Exception as exc:
-            logger.exception("Failed to update leave type: leave_type_id=%s", leave_type_id)
+            logger.exception(
+                "Failed to update leave type: leave_type_id=%s", leave_type_id
+            )
             raise DatabaseException("Failed to update leave type") from exc
 
     async def get_leave_balance(
@@ -135,14 +165,10 @@ class LeaveService:
             if balance_year < 1900 or balance_year > 9999:
                 raise ValidationException("year must be between 1900 and 9999")
 
-            if current_user.role_name == RoleName.employee:
-                current_employee_id = await self.leave_repo.get_employee_id_by_user_id(
-                    current_user.user_id
-                )
-                if current_employee_id is None:
-                    raise NotFoundException("Employee profile")
-                if current_employee_id != employee_id:
-                    raise ForbiddenException("You can only view your own leave balance")
+            await self.authorization_policy.ensure_can_view_employee(
+                current_user,
+                employee_id,
+            )
 
             if not await self.leave_repo.employee_exists(employee_id):
                 raise NotFoundException("Employee")
@@ -238,7 +264,9 @@ class LeaveService:
         except AppException:
             raise
         except Exception as exc:
-            logger.exception("Failed to create leave request: employee_id=%s", employee_id)
+            logger.exception(
+                "Failed to create leave request: employee_id=%s", employee_id
+            )
             raise DatabaseException("Failed to create leave request") from exc
 
     async def list_leave_requests(
@@ -248,19 +276,24 @@ class LeaveService:
         current_user: User,
     ) -> schemas.LeaveRequestListResponse:
         try:
-            effective_query = query
-            if current_user.role_name == RoleName.employee:
-                employee_id = await self.leave_repo.get_employee_id_by_user_id(current_user.user_id)
-                if employee_id is None:
-                    raise NotFoundException("Employee profile")
-                effective_query = query.model_copy(update={"employee_id": employee_id})
+            visible_employee_ids = (
+                await self.authorization_policy.scope_for_employee_query(
+                    current_user,
+                    query.employee_id,
+                )
+            )
 
-            leave_requests, total = await self.leave_repo.list_leave_requests(effective_query)
+            leave_requests, total = await self.leave_repo.list_leave_requests(
+                query,
+                visible_employee_ids=visible_employee_ids,
+            )
             return schemas.LeaveRequestListResponse(
-                items=[self._to_read(leave_request) for leave_request in leave_requests],
+                items=[
+                    self._to_read(leave_request) for leave_request in leave_requests
+                ],
                 total=total,
-                page=effective_query.page,
-                page_size=effective_query.page_size,
+                page=query.page,
+                page_size=query.page_size,
             )
         except AppException:
             raise
@@ -268,12 +301,20 @@ class LeaveService:
             logger.exception("Failed to list leave requests")
             raise DatabaseException("Failed to list leave requests") from exc
 
-    async def get_leave_request(self, request_id: uuid.UUID) -> schemas.LeaveRequestRead:
+    async def get_leave_request(
+        self,
+        request_id: uuid.UUID,
+        current_user: User,
+    ) -> schemas.LeaveRequestRead:
         try:
             leave_request = await self.leave_repo.get_leave_request_by_id(request_id)
             if leave_request is None:
                 logger.warning("Leave request not found: request_id=%s", request_id)
                 raise NotFoundException("Leave request")
+            await self.authorization_policy.ensure_can_view_employee(
+                current_user,
+                leave_request.employee_id,
+            )
             return self._to_read(leave_request)
         except AppException:
             raise
@@ -290,7 +331,9 @@ class LeaveService:
         try:
             leave_request = await self.leave_repo.get_leave_request_by_id(request_id)
             if leave_request is None:
-                logger.warning("Leave request not found for update: request_id=%s", request_id)
+                logger.warning(
+                    "Leave request not found for update: request_id=%s", request_id
+                )
                 raise NotFoundException("Leave request")
             if leave_request.employee_id != employee_id:
                 raise ForbiddenException("You can only update your own leave request")
@@ -303,15 +346,20 @@ class LeaveService:
                 "approved_at",
                 "rejection_reason",
             }
-            touched_forbidden_fields = forbidden_fields.intersection(payload.model_fields_set)
+            touched_forbidden_fields = forbidden_fields.intersection(
+                payload.model_fields_set
+            )
             if touched_forbidden_fields:
                 raise ValidationException(
                     f"{', '.join(sorted(touched_forbidden_fields))} cannot be updated here"
                 )
 
             leave_type_id = payload.leave_type_id or leave_request.leave_type_id
-            if payload.leave_type_id is not None and not await self.leave_repo.leave_type_is_active(
-                payload.leave_type_id
+            if (
+                payload.leave_type_id is not None
+                and not await self.leave_repo.leave_type_is_active(
+                    payload.leave_type_id
+                )
             ):
                 raise NotFoundException("Leave type")
 
@@ -355,7 +403,9 @@ class LeaveService:
         except AppException:
             raise
         except Exception as exc:
-            logger.exception("Failed to update leave request: request_id=%s", request_id)
+            logger.exception(
+                "Failed to update leave request: request_id=%s", request_id
+            )
             raise DatabaseException("Failed to update leave request") from exc
 
     async def cancel_leave_request(
@@ -366,7 +416,9 @@ class LeaveService:
         try:
             leave_request = await self.leave_repo.get_leave_request_by_id(request_id)
             if leave_request is None:
-                logger.warning("Leave request not found for cancel: request_id=%s", request_id)
+                logger.warning(
+                    "Leave request not found for cancel: request_id=%s", request_id
+                )
                 raise NotFoundException("Leave request")
             if leave_request.employee_id != employee_id:
                 raise ForbiddenException("You can only cancel your own leave request")
@@ -383,7 +435,9 @@ class LeaveService:
         except AppException:
             raise
         except Exception as exc:
-            logger.exception("Failed to cancel leave request: request_id=%s", request_id)
+            logger.exception(
+                "Failed to cancel leave request: request_id=%s", request_id
+            )
             raise DatabaseException("Failed to cancel leave request") from exc
 
     async def review_leave_request(
@@ -393,6 +447,7 @@ class LeaveService:
         *,
         approver_id: uuid.UUID,
         reviewer_role: RoleName,
+        current_user: User,
     ) -> schemas.LeaveRequestRead:
         try:
             if payload.action not in {ApprovalAction.approved, ApprovalAction.rejected}:
@@ -400,10 +455,17 @@ class LeaveService:
 
             leave_request = await self.leave_repo.get_leave_request_by_id(request_id)
             if leave_request is None:
-                logger.warning("Leave request not found for review: request_id=%s", request_id)
+                logger.warning(
+                    "Leave request not found for review: request_id=%s", request_id
+                )
                 raise NotFoundException("Leave request")
             if leave_request.status != LeaveRequestStatus.pending:
                 raise ConflictException("Only pending leave requests can be reviewed")
+
+            await self.authorization_policy.ensure_can_view_employee(
+                current_user,
+                leave_request.employee_id,
+            )
 
             reviewed = await self.leave_repo.review_leave_request(
                 leave_request,
@@ -421,7 +483,9 @@ class LeaveService:
         except AppException:
             raise
         except Exception as exc:
-            logger.exception("Failed to review leave request: request_id=%s", request_id)
+            logger.exception(
+                "Failed to review leave request: request_id=%s", request_id
+            )
             raise DatabaseException("Failed to review leave request") from exc
 
     async def list_leave_request_logs(
@@ -432,26 +496,32 @@ class LeaveService:
         try:
             leave_request = await self.leave_repo.get_leave_request_by_id(request_id)
             if leave_request is None:
-                logger.warning("Leave request not found for logs: request_id=%s", request_id)
+                logger.warning(
+                    "Leave request not found for logs: request_id=%s", request_id
+                )
                 raise NotFoundException("Leave request")
 
-            if current_user.role_name == RoleName.employee:
-                employee_id = await self.leave_repo.get_employee_id_by_user_id(current_user.user_id)
-                if employee_id is None:
-                    raise NotFoundException("Employee profile")
-                if leave_request.employee_id != employee_id:
-                    raise ForbiddenException("You can only view logs for your own leave request")
+            await self.authorization_policy.ensure_can_view_employee(
+                current_user,
+                leave_request.employee_id,
+            )
 
             logs = await self.leave_repo.list_leave_approval_logs(request_id)
             return [schemas.LeaveApprovalLogRead.model_validate(log) for log in logs]
         except AppException:
             raise
         except Exception as exc:
-            logger.exception("Failed to list leave request logs: request_id=%s", request_id)
+            logger.exception(
+                "Failed to list leave request logs: request_id=%s", request_id
+            )
             raise DatabaseException("Failed to list leave request logs") from exc
 
 
 def get_leave_service(
     leave_repo: LeaveRepo = Depends(get_leave_repo),
+    authorization_policy: AuthorizationPolicy = Depends(get_authorization_policy),
 ) -> LeaveService:
-    return LeaveService(leave_repo=leave_repo)
+    return LeaveService(
+        leave_repo=leave_repo,
+        authorization_policy=authorization_policy,
+    )

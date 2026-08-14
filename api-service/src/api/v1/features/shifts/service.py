@@ -28,6 +28,86 @@ class WorkShiftService:
         return schemas.WorkShiftRead.model_validate(shift)
 
     @staticmethod
+    def _holiday_to_read(holiday) -> schemas.HolidayRead:
+        return schemas.HolidayRead.model_validate(holiday)
+
+    async def list_holidays(
+        self,
+        query: schemas.HolidayListQuery,
+    ) -> list[schemas.HolidayRead]:
+        holidays = await self.work_shift_repo.list_holidays(query)
+        logger.info(
+            "List holidays: year=%s date_from=%s date_to=%s count=%s",
+            query.year,
+            query.date_from,
+            query.date_to,
+            len(holidays),
+        )
+        return [self._holiday_to_read(holiday) for holiday in holidays]
+
+    async def get_holiday(self, holiday_id: int) -> schemas.HolidayRead:
+        holiday = await self.work_shift_repo.get_holiday_by_id(holiday_id)
+        if holiday is None:
+            logger.warning("Holiday not found: holiday_id=%s", holiday_id)
+            raise NotFoundException("Holiday")
+        return self._holiday_to_read(holiday)
+
+    async def create_holiday(
+        self,
+        payload: schemas.HolidayCreate,
+    ) -> schemas.HolidayRead:
+        if not payload.name.strip():
+            raise ValidationException(
+                "name must contain at least one non-whitespace character"
+            )
+        if await self.work_shift_repo.holiday_date_exists(payload.holiday_date):
+            raise ConflictException("A holiday already exists on this date")
+
+        holiday = await self.work_shift_repo.create_holiday(payload)
+        logger.info(
+            "Holiday created: holiday_id=%s holiday_date=%s",
+            holiday.holiday_id,
+            holiday.holiday_date,
+        )
+        return self._holiday_to_read(holiday)
+
+    async def update_holiday(
+        self,
+        holiday_id: int,
+        payload: schemas.HolidayUpdate,
+    ) -> schemas.HolidayRead:
+        holiday = await self.work_shift_repo.get_holiday_by_id(holiday_id)
+        if holiday is None:
+            raise NotFoundException("Holiday")
+
+        if payload.name is not None and not payload.name.strip():
+            raise ValidationException(
+                "name must contain at least one non-whitespace character"
+            )
+        if (
+            payload.holiday_date is not None
+            and payload.holiday_date != holiday.holiday_date
+            and await self.work_shift_repo.holiday_date_exists(
+                payload.holiday_date,
+                exclude_holiday_id=holiday_id,
+            )
+        ):
+            raise ConflictException("A holiday already exists on this date")
+
+        updated = await self.work_shift_repo.update_holiday(holiday, payload)
+        logger.info("Holiday updated: holiday_id=%s", holiday_id)
+        return self._holiday_to_read(updated)
+
+    async def delete_holiday(self, holiday_id: int) -> None:
+        holiday = await self.work_shift_repo.get_holiday_by_id(holiday_id)
+        if holiday is None:
+            logger.warning("Holiday not found for deletion: holiday_id=%s", holiday_id)
+            raise NotFoundException("Holiday")
+
+        await self.work_shift_repo.delete_holiday(holiday)
+        logger.info("Holiday deleted: holiday_id=%s", holiday_id)
+
+    @staticmethod
     def _validate_update_time_window(existing, payload: schemas.WorkShiftUpdate) -> None:
         start_time = payload.start_time if payload.start_time is not None else existing.start_time
         end_time = payload.end_time if payload.end_time is not None else existing.end_time

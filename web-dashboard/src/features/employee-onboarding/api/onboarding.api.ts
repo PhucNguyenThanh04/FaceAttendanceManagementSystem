@@ -32,7 +32,7 @@ export const onboardingApi = {
     return response.data
   },
   cancelSession: async (sessionId: string): Promise<OnboardingCancelResponse> => {
-    const response = await api.delete<OnboardingCancelResponse>(`/employee-onboarding/${sessionId}`)
+    const response = await api.post<OnboardingCancelResponse>(`/employee-onboarding/${sessionId}/cancel`)
     return response.data
   },
 }

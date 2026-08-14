@@ -3,7 +3,7 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.features.staff.departments import schemas
-from src.api.v1.features.staff.models import Department
+from src.api.v1.features.staff.models import Department, DepartmentManager, Employee
 from src.core.db.database import get_db
 from src.utils.exeptions import ConflictException, DatabaseException, NotFoundException
 from src.utils.setup_logger import setup_logger
@@ -57,6 +57,25 @@ class DepartmentRepo:
 
     async def get_department_by_code(self, code: str) -> Department | None:
         return await self.db.scalar(select(Department).where(Department.code == code.strip()))
+
+    async def list_department_managers(self, department_id: int) -> list[Employee]:
+        try:
+            result = await self.db.execute(
+                select(Employee)
+                .join(
+                    DepartmentManager,
+                    DepartmentManager.manager_id == Employee.employee_id,
+                )
+                .where(DepartmentManager.department_id == department_id)
+                .order_by(Employee.full_name.asc(), Employee.employee_code.asc())
+            )
+            return list(result.scalars().all())
+        except Exception as exc:
+            logger.exception(
+                "Failed to list department managers: department_id=%s",
+                department_id,
+            )
+            raise DatabaseException("Failed to list department managers") from exc
 
     async def list_departments(
         self,

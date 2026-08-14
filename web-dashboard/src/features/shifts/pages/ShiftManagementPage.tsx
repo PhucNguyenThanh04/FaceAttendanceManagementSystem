@@ -12,6 +12,7 @@ import { ChangeShiftModal } from '@/features/shifts/components/ChangeShiftModal'
 import { EmployeeShiftAssignmentPanel } from '@/features/shifts/components/EmployeeShiftAssignmentPanel'
 import { WorkShiftForm } from '@/features/shifts/components/WorkShiftForm'
 import { WorkShiftTable } from '@/features/shifts/components/WorkShiftTable'
+import { HolidayManager } from '@/features/shifts/components/HolidayManager'
 import { useToggleWorkShift } from '@/features/shifts/hooks/useToggleWorkShift'
 import { useWorkShifts } from '@/features/shifts/hooks/useWorkShifts'
 import type {
@@ -31,6 +32,7 @@ export function ShiftManagementPage() {
     useState<EmployeeShiftAssignment | null>(null)
   const [isActiveFilter, setIsActiveFilter] = useState('')
   const [isChangeShiftOpen, setIsChangeShiftOpen] = useState(false)
+  const [isHolidayManagerOpen, setIsHolidayManagerOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
   const [shiftBeingEdited, setShiftBeingEdited] = useState<WorkShift | null>(null)
@@ -76,13 +78,7 @@ export function ShiftManagementPage() {
     <section className="page-grid">
       <div className="page-stack">
         <PageHeader
-          actions={
-            canManageAssignments ? (
-              <Button onClick={() => setIsChangeShiftOpen(true)} variant="secondary">
-                Đổi ca
-              </Button>
-            ) : null
-          }
+          actions={<>{canManageShifts ? <Button onClick={() => setIsHolidayManagerOpen(true)} variant="secondary">Quản lý ngày lễ</Button> : null}{canManageAssignments ? <Button onClick={() => setIsChangeShiftOpen(true)} variant="secondary">Đổi ca</Button> : null}</>}
           description="Quản lý ca làm việc và phân công ca theo endpoint /work-shifts, /shift-assignments."
           eyebrow="Attendance"
           title="Ca làm việc"
@@ -192,6 +188,7 @@ export function ShiftManagementPage() {
         selectedEmployeeId={selectedEmployeeIdForQuery}
         shifts={shifts}
       />
+      {isHolidayManagerOpen ? <HolidayManager onClose={() => setIsHolidayManagerOpen(false)} /> : null}
     </section>
   )
 }

@@ -6,7 +6,10 @@ import httpx
 from fastapi import Depends
 
 from src.api.v1.features.staff.employees import schemas
-from src.api.v1.features.staff.employees.employee_repo import EmployeeRepo, get_employee_repo
+from src.api.v1.features.staff.employees.employee_repo import (
+    EmployeeRepo,
+    get_employee_repo,
+)
 from src.api.v1.shared.enums import EmployeeStatus, FaceProfileStatus, UserStatus
 from src.core.clients.face_server.clients import FaceServerClient
 from src.core.dependencies.dep import get_ai_http_client
@@ -22,7 +25,9 @@ logger = setup_logger(__name__)
 
 
 class EmployeeService:
-    def __init__(self, employee_repo: EmployeeRepo, face_server_client: FaceServerClient):
+    def __init__(
+        self, employee_repo: EmployeeRepo, face_server_client: FaceServerClient
+    ):
         self.employee_repo = employee_repo
         self.face_server_client = face_server_client
 
@@ -47,30 +52,35 @@ class EmployeeService:
         if not pos.is_active:
             raise BadRequestException("Position is inactive")
 
-
-    async def _validate_references_on_create(self, payload: schemas.EmployeeCreate) -> None:
+    async def _validate_references_on_create(
+        self, payload: schemas.EmployeeCreate
+    ) -> None:
         if payload.user_id is not None:
             if not await self.employee_repo.user_exists(payload.user_id):
                 raise BadRequestException("User not found")
             if await self.employee_repo.user_linked_to_other_employee(payload.user_id):
                 raise ConflictException("User is already linked to another employee")
-        if payload.employee_code is not None and await self.employee_repo.employee_code_exists(
-            payload.employee_code
+        if (
+            payload.employee_code is not None
+            and await self.employee_repo.employee_code_exists(payload.employee_code)
         ):
             raise ConflictException("Employee code already exists")
 
-        if payload.department_id is not None and not await self.employee_repo.department_exists(
-            payload.department_id
+        if (
+            payload.department_id is not None
+            and not await self.employee_repo.department_exists(payload.department_id)
         ):
             raise BadRequestException("Department not found")
 
-        if payload.position_id is not None and not await self.employee_repo.position_exists(
-            payload.position_id
+        if (
+            payload.position_id is not None
+            and not await self.employee_repo.position_exists(payload.position_id)
         ):
             raise BadRequestException("Position not found")
 
-        if payload.manager_id is not None and not await self.employee_repo.manager_exists(
-            payload.manager_id
+        if (
+            payload.manager_id is not None
+            and not await self.employee_repo.manager_exists(payload.manager_id)
         ):
             raise BadRequestException("Manager not found")
 
@@ -89,13 +99,15 @@ class EmployeeService:
             ):
                 raise ConflictException("User is already linked to another employee")
 
-        if payload.department_id is not None and not await self.employee_repo.department_exists(
-            payload.department_id
+        if (
+            payload.department_id is not None
+            and not await self.employee_repo.department_exists(payload.department_id)
         ):
             raise BadRequestException("Department not found")
 
-        if payload.position_id is not None and not await self.employee_repo.position_exists(
-            payload.position_id
+        if (
+            payload.position_id is not None
+            and not await self.employee_repo.position_exists(payload.position_id)
         ):
             raise BadRequestException("Position not found")
 
@@ -146,7 +158,9 @@ class EmployeeService:
             )
             return
 
-        await self._deactivate_ai_vectors_for_employee(employee_id=employee_id, reason=reason)
+        await self._deactivate_ai_vectors_for_employee(
+            employee_id=employee_id, reason=reason
+        )
 
     async def _activate_ai_vectors_for_employee(
         self,
@@ -189,7 +203,9 @@ class EmployeeService:
             )
             return
 
-        await self._activate_ai_vectors_for_employee(employee_id=employee_id, reason=reason)
+        await self._activate_ai_vectors_for_employee(
+            employee_id=employee_id, reason=reason
+        )
 
     async def create_employee(
         self,
@@ -232,11 +248,35 @@ class EmployeeService:
     async def get_employee_by_code(self, employee_code: str) -> schemas.EmployeeRead:
         employee = await self.employee_repo.get_employee_by_code(employee_code)
         if employee is None:
-            logger.warning("Employee not found by code: employee_code=%s", employee_code)
+            logger.warning(
+                "Employee not found by code: employee_code=%s", employee_code
+            )
             raise NotFoundException("Employee")
         return self._to_read(employee)
 
-    async def list_employees(self, query: schemas.EmployeeListQuery) -> dict:
+    async def list_subordinates(
+        self,
+        manager_id: uuid.UUID,
+    ) -> list[schemas.EmployeeSummary]:
+        manager = await self.employee_repo.get_employee_by_id(manager_id)
+        if manager is None:
+            logger.warning("Manager not found: manager_id=%s", manager_id)
+            raise NotFoundException("Employee")
+
+        subordinates = await self.employee_repo.list_subordinates(manager_id)
+        logger.info(
+            "List subordinates: manager_id=%s count=%s",
+            manager_id,
+            len(subordinates),
+        )
+        return [schemas.EmployeeSummary.model_validate(item) for item in subordinates]
+
+    async def list_employees(
+        self,
+        query: schemas.EmployeeListQuery,
+        *,
+        visible_employee_ids: set[uuid.UUID] | None = None,
+    ) -> dict:
         employees, total = await self.employee_repo.list_employees(
             page=query.page,
             page_size=query.page_size,
@@ -245,6 +285,7 @@ class EmployeeService:
             position_id=query.position_id,
             manager_id=query.manager_id,
             status=query.status,
+            visible_employee_ids=visible_employee_ids,
         )
         logger.info(
             "List employees: page=%s page_size=%s total=%s search=%s",
@@ -356,7 +397,9 @@ class EmployeeService:
 
     async def hard_delete_employee_for_rollback(self, employee_id: uuid.UUID) -> None:
         await self.employee_repo.hard_delete_employee(employee_id)
-        logger.warning("Employee hard deleted for rollback: employee_id=%s", employee_id)
+        logger.warning(
+            "Employee hard deleted for rollback: employee_id=%s", employee_id
+        )
 
     async def deactivate_employee(self, employee_id: uuid.UUID) -> schemas.EmployeeRead:
         employee = await self.employee_repo.get_employee_by_id(employee_id)
@@ -381,7 +424,9 @@ class EmployeeService:
             reason="employee_deactivate",
         )
         deactivated = await self.employee_repo.deactivate_employee(employee_id)
-        logger.info("Employee deactivated with linked cleanup: employee_id=%s", employee_id)
+        logger.info(
+            "Employee deactivated with linked cleanup: employee_id=%s", employee_id
+        )
         return self._to_read(deactivated)
 
     async def activate_employee(self, employee_id: uuid.UUID) -> schemas.EmployeeRead:
@@ -407,7 +452,9 @@ class EmployeeService:
             reason="employee_activate",
         )
         activated = await self.employee_repo.activate_employee_with_links(employee_id)
-        logger.info("Employee activated with linked restore: employee_id=%s", employee_id)
+        logger.info(
+            "Employee activated with linked restore: employee_id=%s", employee_id
+        )
         return self._to_read(activated)
 
 

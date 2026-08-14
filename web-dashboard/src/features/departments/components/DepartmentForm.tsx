@@ -1,17 +1,20 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { StatusMessage } from '@/components/ui/StatusMessage'
-import { useCreateDepartment } from '@/features/departments/hooks/useCreateDepartment'
+import { useCreateDepartment, useUpdateDepartment } from '@/features/departments/hooks/useCreateDepartment'
+import type { Department } from '@/features/departments/types/department.types'
 import {
   departmentSchema,
   type DepartmentFormValues,
 } from '@/features/departments/schemas/department.schema'
 import { getApiErrorMessage } from '@/lib/utils'
 
-export function DepartmentForm() {
+export function DepartmentForm({ department, onCancel, onSaved }: { department?: Department | null; onCancel?: () => void; onSaved?: () => void }) {
   const createDepartment = useCreateDepartment()
+  const updateDepartment = useUpdateDepartment()
   const {
     formState: { errors },
     handleSubmit,
@@ -27,19 +30,23 @@ export function DepartmentForm() {
     },
   })
 
+  useEffect(() => {
+    reset({
+      code: department?.code ?? '',
+      description: department?.description ?? '',
+      is_active: department?.is_active ?? true,
+      name: department?.name ?? '',
+    })
+  }, [department, reset])
+
   const onSubmit = (values: DepartmentFormValues) => {
-    createDepartment.mutate(
-      {
-        code: values.code || null,
-        description: values.description || null,
-        is_active: values.is_active,
-        name: values.name,
-      },
-      {
-        onSuccess: () => reset(),
-      },
-    )
+    const payload = { code: values.code || null, description: values.description || null, is_active: values.is_active, name: values.name }
+    const options = { onSuccess: () => { reset(); onSaved?.() } }
+    if (department) updateDepartment.mutate({ departmentId: department.department_id, payload }, options)
+    else createDepartment.mutate(payload, options)
   }
+
+  const mutation = department ? updateDepartment : createDepartment
 
   return (
     <form className="resource-form" onSubmit={handleSubmit(onSubmit)}>
@@ -50,14 +57,15 @@ export function DepartmentForm() {
         <input type="checkbox" {...register('is_active')} />
         <span>Đang hoạt động</span>
       </label>
-      {createDepartment.isError ? (
+      {mutation.isError ? (
         <StatusMessage tone="error">
-          {getApiErrorMessage(createDepartment.error, 'Không thể tạo phòng ban.')}
+          {getApiErrorMessage(mutation.error, `Không thể ${department ? 'cập nhật' : 'tạo'} phòng ban.`)}
         </StatusMessage>
       ) : null}
-      <Button isLoading={createDepartment.isPending} type="submit">
-        Tạo phòng ban
-      </Button>
+      <div className="action-row">
+        <Button isLoading={mutation.isPending} type="submit">{department ? 'Lưu thay đổi' : 'Tạo phòng ban'}</Button>
+        {department ? <Button onClick={onCancel} variant="secondary">Hủy</Button> : null}
+      </div>
     </form>
   )
 }

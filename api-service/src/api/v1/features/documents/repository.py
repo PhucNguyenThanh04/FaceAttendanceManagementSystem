@@ -83,6 +83,30 @@ class DocumentRepository:
             logger.exception("Failed to mark document ready: document_id=%s", document_id)
             raise DatabaseException("Failed to update document") from exc
 
+    async def update_document(
+        self,
+        document: Document,
+        payload: schemas.DocumentUpdate,
+    ) -> Document:
+        update_data = payload.model_dump(exclude_unset=True)
+        changed = False
+        for field, value in update_data.items():
+            if getattr(document, field) != value:
+                setattr(document, field, value)
+                changed = True
+
+        if not changed:
+            return document
+
+        try:
+            await self.db.commit()
+            await self.db.refresh(document)
+            return document
+        except Exception as exc:
+            await self.db.rollback()
+            logger.exception("Failed to update document: document_id=%s", document.id)
+            raise DatabaseException("Failed to update document") from exc
+
     async def delete_document(self, document_id: uuid.UUID) -> None:
         document = await self.get_document_or_404(document_id)
         try:

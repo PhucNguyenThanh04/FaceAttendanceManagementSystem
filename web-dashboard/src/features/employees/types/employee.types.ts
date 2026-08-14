@@ -32,3 +32,8 @@ export type EmployeeListParams = {
 }
 
 export type EmployeeListResponse = PaginatedResponse<Employee>
+
+export type EmployeeUpdatePayload = Partial<Pick<Employee,
+  'address' | 'date_of_birth' | 'department_id' | 'employee_code' | 'full_name' | 'gender' |
+  'hire_date' | 'manager_id' | 'phone' | 'position_id' | 'resignation_date' | 'status'
+>>

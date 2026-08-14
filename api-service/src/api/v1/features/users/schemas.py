@@ -52,27 +52,14 @@ class UserCreate(UserBase):
         return value
 
 
-class UserUpdate(BaseModel):
-    email: str | None = Field(
-        default=None,
+class UserProfileUpdate(BaseModel):
+    email: str = Field(
+        ...,
         min_length=5,
         max_length=255,
         pattern=EMAIL_PATTERN,
     )
-    status: UserStatus | None = None
-    password: str | None = Field(default=None, min_length=PASSWORD_MIN_LENGTH, max_length=128)
-    role_name: RoleName | None = None
 
-    @field_validator("password")
-    @classmethod
-    def validate_password_strength(cls, value: str | None) -> str | None:
-        if value is None:
-            return value
-        if not any(ch.isalpha() for ch in value):
-            raise ValueError("Password must include at least one letter")
-        if not any(ch.isdigit() for ch in value):
-            raise ValueError("Password must include at least one digit")
-        return value
 
 class UserRead(AppTimezoneModel):
     model_config = ConfigDict(from_attributes=True)
@@ -87,8 +74,25 @@ class UserRead(AppTimezoneModel):
     updated_at: datetime
 
 
-class UserRoleAssignRequest(BaseModel):
+class RoleAssignmentRequest(BaseModel):
     role_name: RoleName
+
+
+class UserStatusUpdate(BaseModel):
+    status: UserStatus
+
+
+class AdminPasswordReset(BaseModel):
+    new_password: str = Field(..., min_length=PASSWORD_MIN_LENGTH, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password_strength(cls, value: str) -> str:
+        if not any(ch.isalpha() for ch in value):
+            raise ValueError("Password must include at least one letter")
+        if not any(ch.isdigit() for ch in value):
+            raise ValueError("Password must include at least one digit")
+        return value
 
 
 class UserListQuery(BaseModel):

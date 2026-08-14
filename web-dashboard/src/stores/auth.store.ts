@@ -4,6 +4,7 @@ import { tokenStorage } from '@/lib/storage'
 
 type LoginSession = {
   accessToken: string
+  refreshToken: string
   user: AuthUser
 }
 
@@ -23,12 +24,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   accessToken: storedToken,
   isAuthenticated: Boolean(storedToken),
   user: null,
-  login: ({ accessToken, user }) => {
+  login: ({ accessToken, refreshToken, user }) => {
     tokenStorage.setAccessToken(accessToken)
+    tokenStorage.setRefreshToken(refreshToken)
     set({ accessToken, isAuthenticated: true, user })
   },
   logout: () => {
-    tokenStorage.clearAccessToken()
+    tokenStorage.clearSession()
     set({ accessToken: null, isAuthenticated: false, user: null })
   },
   setAccessToken: (token) => {

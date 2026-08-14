@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { Header } from '@/components/layout/Header'
 import { Sidebar } from '@/components/layout/Sidebar'
@@ -10,6 +10,7 @@ import { getApiErrorMessage } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth.store'
 
 export function AppLayout() {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const accessToken = useAuthStore((state) => state.accessToken)
   const logout = useAuthStore((state) => state.logout)
   const navigate = useNavigate()
@@ -31,11 +32,20 @@ export function AppLayout() {
     }
   }, [logout, meQuery.isError, navigate])
 
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      logout()
+      navigate(routePaths.login, { replace: true })
+    }
+    window.addEventListener('face-attendance:session-expired', handleSessionExpired)
+    return () => window.removeEventListener('face-attendance:session-expired', handleSessionExpired)
+  }, [logout, navigate])
+
   return (
     <div className="app-shell">
-      <Sidebar />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       <div className="app-main">
-        <Header />
+        <Header onMenuToggle={() => setIsSidebarOpen((open) => !open)} />
         <main className="content">
           {isResolvingUser ? <Loading label="Đang tải hồ sơ đăng nhập" /> : null}
           {meQuery.isError ? (

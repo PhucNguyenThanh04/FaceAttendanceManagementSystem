@@ -54,18 +54,30 @@ class FaceProfileUpdate(BaseModel):
         return self
 
 
+class FaceProfileLifecycleUpdate(BaseModel):
+    """Public lifecycle mutation without vector-store implementation details."""
+
+    status: FaceProfileStatus
+
+    @model_validator(mode="after")
+    def require_revoke_endpoint(self) -> "FaceProfileLifecycleUpdate":
+        if self.status == FaceProfileStatus.revoked:
+            raise ValueError("Use the dedicated revoke endpoint for revoked status")
+        return self
+
+
 class FaceProfileRead(AppTimezoneModel):
+    """Client-safe projection of a face profile.
+
+    Vector-store and embedding metadata deliberately stay internal to the face
+    enrollment services. API consumers only need identity and lifecycle state.
+    """
+
     model_config = ConfigDict(from_attributes=True)
 
     profile_id: uuid.UUID
     employee_id: uuid.UUID
     status: FaceProfileStatus
-    qdrant_collection: str
-    embedding_model: str | None = None
-    embedding_version: str | None = None
-    registered_by: uuid.UUID | None = None
-    revocation_reason: str | None = None
-    revoked_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -1,0 +1,17 @@
+import { lazy } from 'react'
+
+export const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
+export const EmployeeListPage = lazy(() => import('@/features/employees/pages/EmployeeListPage').then((module) => ({ default: module.EmployeeListPage })))
+export const DepartmentListPage = lazy(() => import('@/features/departments/pages/DepartmentListPage').then((module) => ({ default: module.DepartmentListPage })))
+export const PositionListPage = lazy(() => import('@/features/positions/pages/PositionListPage').then((module) => ({ default: module.PositionListPage })))
+export const ShiftManagementPage = lazy(() => import('@/features/shifts/pages/ShiftManagementPage').then((module) => ({ default: module.ShiftManagementPage })))
+export const FaceProfileListPage = lazy(() => import('@/features/face-profiles/pages/FaceProfileListPage').then((module) => ({ default: module.FaceProfileListPage })))
+export const EmployeeOnboardingPage = lazy(() => import('@/features/employee-onboarding/pages/EmployeeOnboardingPage').then((module) => ({ default: module.EmployeeOnboardingPage })))
+export const AttendancePage = lazy(() => import('@/features/attendance/pages/AttendancePage').then((module) => ({ default: module.AttendancePage })))
+export const LeavePage = lazy(() => import('@/features/leave/pages/LeavePage').then((module) => ({ default: module.LeavePage })))
+export const CorrectionsPage = lazy(() => import('@/features/corrections/pages/CorrectionsPage').then((module) => ({ default: module.CorrectionsPage })))
+export const AuditLogsPage = lazy(() => import('@/features/audit-logs/pages/AuditLogsPage').then((module) => ({ default: module.AuditLogsPage })))
+export const ChatboxPage = lazy(() => import('@/features/chatbox/pages/ChatboxPage').then((module) => ({ default: module.ChatboxPage })))
+export const DocumentManagementPage = lazy(() => import('@/features/documents/pages/DocumentManagementPage').then((module) => ({ default: module.DocumentManagementPage })))
+export const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage').then((module) => ({ default: module.SettingsPage })))
+export const ReportsPage = lazy(() => import('@/features/reports/pages/ReportsPage').then((module) => ({ default: module.ReportsPage })))

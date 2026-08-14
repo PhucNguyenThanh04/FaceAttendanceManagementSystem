@@ -124,6 +124,7 @@ class ConversationService:
         payload: schemas.SendMessageRequest,
         current_employee: Employee,
         current_user: User,
+        access_token: str,
     ) -> schemas.SendMessageResponse:
         conversation = await self.conversation_repository.get_conversation_for_employee(
             conversation_id=conversation_id,
@@ -138,7 +139,8 @@ class ConversationService:
                     user_role=current_user.role_name.value,
                     conversation_id=str(conversation_id),
                     chat_history=chat_history,
-                )
+                ),
+                access_token=access_token,
             )
         except httpx.HTTPError as exc:
             raise MLProcessingException(
@@ -197,6 +199,7 @@ class ConversationService:
         payload: schemas.SendMessageRequest,
         current_employee: Employee,
         current_user: User,
+        access_token: str,
     ) -> AsyncGenerator[str, None]:
         conversation = await self.conversation_repository.get_conversation_for_employee(
             conversation_id=conversation_id,
@@ -216,7 +219,10 @@ class ConversationService:
             latest_final: dict[str, Any] | None = None
 
             try:
-                async for event, event_payload in self.chatbox_client.chat_stream(request):
+                async for event, event_payload in self.chatbox_client.chat_stream(
+                    request,
+                    access_token=access_token,
+                ):
                     if event == "delta":
                         text = str(event_payload.get("text") or "")
                         if text:
@@ -329,6 +335,7 @@ class ConversationService:
         payload: schemas.SendMessageRequest,
         current_employee: Employee,
         current_user: User,
+        access_token: str,
     ) -> schemas.NewMessageResponse:
         conversation = await self.create_conversation(
             payload=schemas.ConversationCreateRequest(
@@ -342,6 +349,7 @@ class ConversationService:
                 payload=payload,
                 current_employee=current_employee,
                 current_user=current_user,
+                access_token=access_token,
             )
         except Exception:
             try:

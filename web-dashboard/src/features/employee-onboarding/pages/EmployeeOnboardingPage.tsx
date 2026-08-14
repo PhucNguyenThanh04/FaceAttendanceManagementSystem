@@ -25,8 +25,6 @@ import type {
 import { usePositions } from '@/features/positions/hooks/usePositions'
 import { formatDateTime, getApiErrorMessage } from '@/lib/utils'
 
-const REQUIRED_ONBOARDING_PHOTOS = 10
-
 export function EmployeeOnboardingPage() {
   const [session, setSession] = useState<OnboardingStartResponse | null>(null)
   const [lastUpload, setLastUpload] = useState<OnboardingPhotoUploadResponse | null>(null)
@@ -55,7 +53,8 @@ export function EmployeeOnboardingPage() {
   })
 
   const validPhotos = acceptedPhotoCount
-  const readyToCommit = validPhotos >= REQUIRED_ONBOARDING_PHOTOS
+  const requiredPhotos = lastUpload?.min_required_photos ?? session?.min_required_photos ?? 3
+  const readyToCommit = validPhotos >= requiredPhotos
 
   const onSubmit = (values: OnboardingFormValues) => {
     setCommitResult(null)
@@ -169,7 +168,7 @@ export function EmployeeOnboardingPage() {
               <div>
                 <span>Ảnh hợp lệ</span>
                 <strong>
-                  {validPhotos}/{REQUIRED_ONBOARDING_PHOTOS}
+                  {validPhotos}/{requiredPhotos}
                 </strong>
               </div>
             </div>
@@ -177,7 +176,7 @@ export function EmployeeOnboardingPage() {
               acceptedCount={validPhotos}
               disabled={uploadImage.isPending || commitSession.isPending}
               onCapture={handleCameraCapture}
-              requiredCount={REQUIRED_ONBOARDING_PHOTOS}
+              requiredCount={requiredPhotos}
             />
             {lastUpload ? (
               <StatusMessage tone={lastUpload.accepted ? 'success' : 'warning'}>

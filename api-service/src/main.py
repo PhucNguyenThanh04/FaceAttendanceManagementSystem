@@ -24,8 +24,8 @@ from src.utils.setup_logger import setup_logger
 from src.api.v1.routers import api_router
 
 logger = setup_logger(__name__, level=logging.DEBUG if settings.debug else logging.INFO)
-UPLOADS_DIR = Path(__file__).resolve().parents[1] / "uploads"
-UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+PUBLIC_AVATARS_DIR = Path(__file__).resolve().parents[1] / "uploads" / "avatars"
+PUBLIC_AVATARS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def parse_cors_origins(raw_origins: str) -> list[str]:
@@ -81,9 +81,7 @@ async def lifespan(app: FastAPI):
             limits=httpx.Limits(max_connections=50, max_keepalive_connections=10),
         )
         app.state.chatbox_http = chatbox_http_client
-        logger.info(
-            "HTTP client khởi tạo thành công"
-        )
+        logger.info("HTTP client khởi tạo thành công")
 
         yield
     except Exception:
@@ -103,12 +101,12 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(
-    title="Face Attendance API",
-    description="Hệ thống chấm công nhận diện khuôn mặt",
-    version="1.0.0",
-    docs_url="/docs" if settings.debug else None,   # tắt docs trên production
-    redoc_url="/redoc" if settings.debug else None,
-    lifespan=lifespan,
+        title="Face Attendance API",
+        description="Hệ thống chấm công nhận diện khuôn mặt",
+        version="1.0.0",
+        docs_url="/docs" if settings.debug else None,  # tắt docs trên production
+        redoc_url="/redoc" if settings.debug else None,
+        lifespan=lifespan,
     )
 
     register_exception_handlers(app)
@@ -124,9 +122,16 @@ def create_app() -> FastAPI:
     app.add_middleware(TimingMiddleware)
 
     app.include_router(api_router, prefix="/api/v1")
-    app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+    # Only avatars are public. Documents live under the sibling private storage
+    # directory and must be served by the authenticated documents endpoint.
+    app.mount(
+        "/uploads/avatars",
+        StaticFiles(directory=str(PUBLIC_AVATARS_DIR)),
+        name="avatars",
+    )
 
     return app
+
 
 app = create_app()
 
@@ -135,6 +140,7 @@ app = create_app()
 @app.get("/health", tags=["system"])
 async def health_check():
     return {"status": "ok"}
+
 
 @app.get("/")
 async def root():

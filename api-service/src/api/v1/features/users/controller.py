@@ -36,7 +36,7 @@ def _ensure_self_or_admin(current_user: User, target_user_id: UUID) -> None:
 @router.get("/", response_model=dict)
 async def list_users(
     query: user_schemas.UserListQuery = Depends(),
-    _: User = Depends(require_roles(RoleName.manager, RoleName.hr, RoleName.admin)),
+    _: User = Depends(require_roles(RoleName.hr, RoleName.admin)),
     user_service: UserService = Depends(get_user_service),
 ) -> dict:
     return await user_service.list_users(query)
@@ -55,11 +55,11 @@ async def get_user(
 @router.patch("/{user_id}", response_model=user_schemas.UserRead)
 async def update_user(
     user_id: UUID,
-    payload: user_schemas.UserUpdate,
-    _: User = Depends(require_roles(RoleName.hr, RoleName.admin)),
+    payload: user_schemas.UserProfileUpdate,
+    current_user: User = Depends(get_current_user),
     user_service: UserService = Depends(get_user_service),
 ) -> user_schemas.UserRead:
-    return await user_service.update_user(user_id, payload)
+    return await user_service.update_profile(user_id, payload, current_user)
 
 
 @router.patch("/{user_id}/password", response_model=user_schemas.UserRead)
@@ -69,25 +69,43 @@ async def change_password(
     current_user: User = Depends(get_current_user),
     user_service: UserService = Depends(get_user_service),
 ) -> user_schemas.UserRead:
-    _ensure_self_or_admin(current_user, user_id)
-    return await user_service.change_password(user_id, payload)
+    return await user_service.change_password(user_id, payload, current_user)
+
+
+@router.patch("/{user_id}/password/reset", response_model=user_schemas.UserRead)
+async def admin_reset_password(
+    user_id: UUID,
+    payload: user_schemas.AdminPasswordReset,
+    current_user: User = Depends(require_roles(RoleName.admin)),
+    user_service: UserService = Depends(get_user_service),
+) -> user_schemas.UserRead:
+    return await user_service.admin_reset_password(user_id, payload, current_user)
 
 
 @router.patch("/{user_id}/role", response_model=user_schemas.UserRead)
 async def assign_role(
     user_id: UUID,
-    payload: user_schemas.UserRoleAssignRequest,
-    _: User = Depends(require_roles(RoleName.hr, RoleName.admin)),
+    payload: user_schemas.RoleAssignmentRequest,
+    current_user: User = Depends(require_roles(RoleName.admin)),
     user_service: UserService = Depends(get_user_service),
 ) -> user_schemas.UserRead:
-    return await user_service.assign_role(user_id, payload)
+    return await user_service.assign_role(user_id, payload, current_user)
+
+
+@router.patch("/{user_id}/status", response_model=user_schemas.UserRead)
+async def update_user_status(
+    user_id: UUID,
+    payload: user_schemas.UserStatusUpdate,
+    current_user: User = Depends(require_roles(RoleName.admin)),
+    user_service: UserService = Depends(get_user_service),
+) -> user_schemas.UserRead:
+    return await user_service.update_status(user_id, payload, current_user)
 
 
 @router.patch("/{user_id}/deactivate", response_model=user_schemas.UserRead)
 async def deactivate_user(
     user_id: UUID,
-    _: User = Depends(require_roles(RoleName.hr, RoleName.admin)),
+    current_user: User = Depends(require_roles(RoleName.admin)),
     user_service: UserService = Depends(get_user_service),
 ) -> user_schemas.UserRead:
-    return await user_service.deactivate_user(user_id)
-
+    return await user_service.deactivate_user(user_id, current_user)

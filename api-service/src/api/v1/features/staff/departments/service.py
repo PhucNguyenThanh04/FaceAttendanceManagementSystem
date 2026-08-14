@@ -1,6 +1,7 @@
 from fastapi import Depends
 
 from src.api.v1.features.staff.departments import schemas
+from src.api.v1.features.staff.employees import schemas as employee_schemas
 from src.api.v1.features.staff.departments.department_repo import (
     DepartmentRepo,
     get_department_repo,
@@ -58,6 +59,29 @@ class DepartmentService:
             logger.warning("Department not found by code: code=%s", code)
             raise NotFoundException("Department")
         return self._to_read(department)
+
+    async def list_department_managers(
+        self,
+        department_id: int,
+    ) -> list[employee_schemas.EmployeeSummary]:
+        department = await self.department_repo.get_department_by_id(department_id)
+        if department is None:
+            logger.warning(
+                "Department not found for manager list: department_id=%s",
+                department_id,
+            )
+            raise NotFoundException("Department")
+
+        managers = await self.department_repo.list_department_managers(department_id)
+        logger.info(
+            "List department managers: department_id=%s count=%s",
+            department_id,
+            len(managers),
+        )
+        return [
+            employee_schemas.EmployeeSummary.model_validate(manager)
+            for manager in managers
+        ]
 
     async def list(
         self,

@@ -39,11 +39,9 @@ export function FaceProfileTable({ profiles, employeeNames }: FaceProfileTablePr
         <tr>
           <th>Profile ID</th>
           <th>Nhân viên</th>
-          <th>Collection</th>
-          <th>Model</th>
           <th>Trạng thái</th>
           <th>Cập nhật</th>
-          <th>Chi tiết / Hành động</th>
+          <th>Hành động</th>
         </tr>
       </thead>
       <tbody>
@@ -63,21 +61,6 @@ export function FaceProfileTable({ profiles, employeeNames }: FaceProfileTablePr
                   </span>
                 )}
               </td>
-              <td>{profile.qdrant_collection}</td>
-              <td>
-                {profile.embedding_model ? (
-                  <div>
-                    <div>{profile.embedding_model}</div>
-                    {profile.embedding_version && (
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                        v{profile.embedding_version}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  '-'
-                )}
-              </td>
               <td>
                 <FaceProfileStatusBadge status={profile.status} />
               </td>
@@ -92,10 +75,6 @@ export function FaceProfileTable({ profiles, employeeNames }: FaceProfileTablePr
                   >
                     Thu hồi
                   </button>
-                ) : profile.status === 'revoked' ? (
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    Lý do: {profile.revocation_reason || '-'}
-                  </div>
                 ) : (
                   '-'
                 )}

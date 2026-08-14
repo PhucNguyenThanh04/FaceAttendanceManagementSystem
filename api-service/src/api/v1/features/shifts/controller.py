@@ -12,12 +12,73 @@ from src.api.v1.features.shifts.service import (
 )
 from src.api.v1.features.users.models import User
 from src.api.v1.shared.enums import RoleName
-from src.core.dependencies.auth import require_roles, get_current_user_or_rag_api_key
+from src.core.dependencies.auth import (
+    get_current_user,
+    require_roles,
+)
+from src.core.security.authorization import (
+    AuthorizationPolicy,
+    get_authorization_policy,
+)
 
 router = APIRouter(prefix="/work-shifts", tags=["Work-Shifts"])
+holiday_router = APIRouter(prefix="/holidays", tags=["Holidays"])
 
 
-@router.post("/", response_model=schemas.WorkShiftRead, status_code=status.HTTP_201_CREATED)
+@holiday_router.post(
+    "",
+    response_model=schemas.HolidayRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_holiday(
+    payload: schemas.HolidayCreate,
+    service: WorkShiftService = Depends(get_work_shift_service),
+    _: User = Depends(require_roles(RoleName.admin)),
+) -> schemas.HolidayRead:
+    return await service.create_holiday(payload)
+
+
+@holiday_router.get("", response_model=list[schemas.HolidayRead])
+async def list_holidays(
+    query: schemas.HolidayListQuery = Depends(),
+    service: WorkShiftService = Depends(get_work_shift_service),
+    _: User = Depends(get_current_user),
+) -> list[schemas.HolidayRead]:
+    return await service.list_holidays(query)
+
+
+@holiday_router.get("/{id}", response_model=schemas.HolidayRead)
+async def get_holiday(
+    id: int,
+    service: WorkShiftService = Depends(get_work_shift_service),
+    _: User = Depends(get_current_user),
+) -> schemas.HolidayRead:
+    return await service.get_holiday(id)
+
+
+@holiday_router.patch("/{id}", response_model=schemas.HolidayRead)
+async def update_holiday(
+    id: int,
+    payload: schemas.HolidayUpdate,
+    service: WorkShiftService = Depends(get_work_shift_service),
+    _: User = Depends(require_roles(RoleName.admin)),
+) -> schemas.HolidayRead:
+    return await service.update_holiday(id, payload)
+
+
+@holiday_router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_holiday(
+    id: int,
+    service: WorkShiftService = Depends(get_work_shift_service),
+    _: User = Depends(require_roles(RoleName.admin)),
+) -> Response:
+    await service.delete_holiday(id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/", response_model=schemas.WorkShiftRead, status_code=status.HTTP_201_CREATED
+)
 async def create_work_shift(
     payload: schemas.WorkShiftCreate,
     service: WorkShiftService = Depends(get_work_shift_service),
@@ -117,8 +178,12 @@ async def create_employee_shift_assignment(
 async def list_employee_shift_assignments(
     employee_id: uuid.UUID,
     service: WorkShiftService = Depends(get_work_shift_service),
-    _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
+    current_user: User = Depends(
+        require_roles(RoleName.admin, RoleName.hr, RoleName.manager)
+    ),
+    policy: AuthorizationPolicy = Depends(get_authorization_policy),
 ) -> list[schemas.EmployeeShiftAssignmentRead]:
+    await policy.ensure_can_view_employee(current_user, employee_id)
     return await service.list_employee_shift_assignments(employee_id)
 
 
@@ -130,8 +195,10 @@ async def get_employee_current_shift(
     employee_id: uuid.UUID,
     as_of: date | None = None,
     service: WorkShiftService = Depends(get_work_shift_service),
-    _: User = Depends(get_current_user_or_rag_api_key),
+    current_user: User = Depends(get_current_user),
+    policy: AuthorizationPolicy = Depends(get_authorization_policy),
 ) -> schemas.CurrentShiftRead:
+    await policy.ensure_can_view_employee(current_user, employee_id)
     return await service.get_current_shift(employee_id=employee_id, as_of=as_of)
 
 

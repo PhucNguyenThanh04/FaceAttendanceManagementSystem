@@ -20,10 +20,10 @@ export type LeaveType = {
 
 export type LeaveTypeCreatePayload = {
   name: string
-  code?: string
+  code?: string | null
   is_paid?: boolean
-  max_days_per_year?: number
-  description?: string
+  max_days_per_year?: number | null
+  description?: string | null
   is_active?: boolean
 }
 

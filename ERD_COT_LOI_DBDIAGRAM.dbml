@@ -1,0 +1,240 @@
+// ERD RÚT GỌN - FACE ATTENDANCE MANAGEMENT SYSTEM
+// Dán toàn bộ file này vào https://dbdiagram.io/d để tạo sơ đồ.
+// Sơ đồ chỉ giữ 10 bảng cốt lõi của quản lý nhân viên,
+// chấm công khuôn mặt và Agentic RAG.
+
+Project FaceAttendanceManagementSystem {
+  database_type: 'PostgreSQL'
+  Note: '''
+    ERD rút gọn phục vụ tiểu luận.
+    Các bảng log, thông báo, cấu hình hệ thống và nghiệp vụ phụ được lược bỏ.
+    Vector khuôn mặt và vector tài liệu được lưu trong Qdrant nên không biểu diễn
+    thành bảng PostgreSQL trong sơ đồ này.
+  '''
+}
+
+// =========================
+// ENUMS
+// =========================
+
+Enum user_status {
+  active
+  inactive
+  locked
+}
+
+Enum employee_status {
+  active
+  inactive
+  resigned
+}
+
+Enum face_profile_status {
+  pending
+  active
+  revoked
+  failed
+}
+
+Enum attendance_event_type {
+  check_in
+  check_out
+  unknown
+}
+
+Enum attendance_record_status {
+  present
+  late
+  early_leave
+  late_and_early_leave
+  absent
+  on_leave
+  holiday
+  missing_check_in
+  missing_check_out
+  manually_edited
+}
+
+Enum attendance_source {
+  face_recognition
+  manual
+  edited
+  system
+}
+
+Enum document_status {
+  processing
+  ready
+  failed
+}
+
+Enum chat_message_role {
+  user
+  assistant
+}
+
+// =========================
+// XÁC THỰC VÀ PHÂN QUYỀN
+// =========================
+
+Table users [headercolor: #6C5CE7] {
+  user_id uuid [pk]
+  email varchar [not null, unique]
+  password_hash varchar [not null]
+  role varchar [not null, note: 'Admin, HR hoặc Employee trong phạm vi tiểu luận']
+  status user_status [not null, default: 'active']
+
+  Note: 'Tài khoản đăng nhập. Role được biểu diễn trực tiếp để ERD rút gọn không cần bảng roles.'
+}
+
+// =========================
+// NHÂN SỰ VÀ TỔ CHỨC
+// =========================
+
+Table employees [headercolor: #0984E3] {
+  employee_id uuid [pk]
+  user_id uuid [unique, note: 'Có thể rỗng; liên kết 1-1 với users']
+  employee_code varchar [not null, unique]
+  full_name varchar [not null]
+  phone varchar
+  hire_date date
+  status employee_status [not null, default: 'active']
+
+  Note: '''
+    Bảng trung tâm của hệ thống.
+    Phòng ban, chức vụ, manager_id và registered_by được ẩn
+    vì không thuộc phạm vi ERD rút gọn.
+  '''
+}
+
+// =========================
+// CA LÀM VIỆC
+// =========================
+
+Table work_shifts [headercolor: #00B894] {
+  shift_id int [pk, increment]
+  code varchar [unique]
+  name varchar [not null]
+  start_time time [not null]
+  end_time time [not null]
+  is_overnight boolean [not null, default: false]
+  late_threshold_minutes int [not null, default: 0]
+  early_leave_threshold_minutes int [not null, default: 0]
+  is_active boolean [not null, default: true]
+
+  Note: 'Định nghĩa ca làm và ngưỡng xác định đi trễ/về sớm.'
+}
+
+Table employee_shift_assignments [headercolor: #00B894] {
+  assignment_id int [pk, increment]
+  employee_id uuid [not null]
+  shift_id int [not null]
+  effective_date date [not null]
+  end_date date
+
+  Note: 'Phân công ca cho nhân viên theo khoảng thời gian hiệu lực.'
+}
+
+// =========================
+// KHUÔN MẶT VÀ CHẤM CÔNG
+// =========================
+
+Table face_profiles [headercolor: #E17055] {
+  profile_id uuid [pk]
+  employee_id uuid [not null, unique]
+  status face_profile_status [not null, default: 'pending']
+  qdrant_collection varchar [not null]
+  embedding_model varchar
+  embedding_version varchar
+
+  Note: 'Metadata hồ sơ khuôn mặt; vector thực tế được lưu trong Qdrant.'
+}
+
+Table attendance_events [headercolor: #E17055] {
+  event_id uuid [pk]
+  employee_id uuid [note: 'Rỗng khi không nhận diện được nhân viên']
+  event_type attendance_event_type [not null]
+  event_time timestamptz [not null]
+  confidence_score float
+  anti_spoof_score float
+  is_accepted boolean [not null, default: true]
+  rejection_reason text
+
+  Note: 'Sự kiện thô, bất biến, được gửi từ dịch vụ nhận diện khuôn mặt.'
+}
+
+Table attendance_records [headercolor: #E17055] {
+  record_id uuid [pk]
+  employee_id uuid [not null]
+  shift_id int
+  work_date date [not null]
+  check_in_time timestamptz
+  check_out_time timestamptz
+  status attendance_record_status [not null]
+  late_minutes int [not null, default: 0]
+  early_leave_minutes int [not null, default: 0]
+  worked_minutes int [not null, default: 0]
+  source attendance_source [not null, default: 'face_recognition']
+
+  indexes {
+    (employee_id, work_date) [unique, name: 'uq_attendance_records_employee_work_date']
+  }
+
+  Note: 'Bảng công chính thức; mỗi nhân viên chỉ có một bản ghi cho một ngày làm việc.'
+}
+
+// =========================
+// AGENTIC RAG VÀ CHAT
+// =========================
+
+Table documents [headercolor: #D63031] {
+  id uuid [pk]
+  uploaded_by uuid
+  title text [not null]
+  file_name text [not null]
+  file_type varchar [not null]
+  allowed_roles varchar[] [not null, note: 'Mảng tên role, không phải khóa ngoại']
+  status document_status [not null, default: 'processing']
+  chunk_count int [not null, default: 0]
+  qdrant_collection text [not null]
+
+  Note: 'Metadata tài liệu RAG; các document chunk và embedding nằm trong Qdrant.'
+}
+
+Table conversations [headercolor: #D63031] {
+  id uuid [pk]
+  employee_id uuid [not null]
+  title text [not null]
+
+  Note: 'Hội thoại của nhân viên với trợ lý Agentic RAG.'
+}
+
+Table chat_messages [headercolor: #D63031] {
+  id uuid [pk]
+  conversation_id uuid [not null]
+  role chat_message_role [not null]
+  content text [not null]
+  citations jsonb [note: 'Dữ liệu trích dẫn, không phải khóa ngoại']
+  ask_user boolean [not null, default: false]
+  created_at timestamptz [not null]
+
+  Note: 'Tin nhắn người dùng/trợ lý và metadata citation hoặc ask-user.'
+}
+
+// =========================
+// QUAN HỆ
+// =========================
+
+Ref: users.user_id - employees.user_id [delete: set null]
+
+Ref: employees.employee_id < employee_shift_assignments.employee_id [delete: cascade]
+Ref: work_shifts.shift_id < employee_shift_assignments.shift_id [delete: restrict]
+
+Ref: employees.employee_id - face_profiles.employee_id [delete: cascade]
+Ref: employees.employee_id < attendance_events.employee_id [delete: set null]
+Ref: employees.employee_id < attendance_records.employee_id [delete: cascade]
+Ref: work_shifts.shift_id < attendance_records.shift_id [delete: set null]
+
+Ref: employees.employee_id < documents.uploaded_by [delete: set null]
+Ref: employees.employee_id < conversations.employee_id [delete: cascade]
+Ref: conversations.id < chat_messages.conversation_id [delete: cascade]

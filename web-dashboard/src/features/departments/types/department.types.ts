@@ -14,3 +14,5 @@ export type CreateDepartmentPayload = {
   description?: string | null
   is_active: boolean
 }
+
+export type UpdateDepartmentPayload = Partial<CreateDepartmentPayload>

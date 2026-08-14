@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, time, timedelta
+from datetime import date, timedelta
 
 from fastapi import Depends
 from sqlalchemy import Select, and_, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -12,9 +13,13 @@ from src.api.v1.features.attendance.models import AttendanceEvent, AttendanceRec
 from src.api.v1.features.attendance import schemas
 from src.api.v1.features.shifts.models import EmployeeShiftAssignment, WorkShift
 from src.api.v1.features.staff.models import Employee
-from src.api.v1.shared.enums import AttendanceRecordStatus, AttendanceSource, EmployeeStatus
+from src.api.v1.shared.enums import (
+    AttendanceRecordStatus,
+    AttendanceSource,
+    EmployeeStatus,
+)
 from src.core.db.database import get_db
-from src.utils.exeptions import DatabaseException
+from src.utils.exeptions import ConflictException, DatabaseException
 from src.utils.setup_logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -25,24 +30,31 @@ class AttendanceRepo:
         self.db = db
 
     @staticmethod
-    def work_date_to_db_value(work_date: date) -> datetime:
-        # Current schema stores work_date as DateTime, so normalize date to midnight.
-        return datetime.combine(work_date, time.min)
+    def work_date_to_db_value(work_date: date) -> date:
+        return work_date
 
     async def employee_exists(self, employee_id: uuid.UUID) -> bool:
         try:
-            stmt = select(Employee.employee_id).where(Employee.employee_id == employee_id)
+            stmt = select(Employee.employee_id).where(
+                Employee.employee_id == employee_id
+            )
             return (await self.db.execute(stmt)).first() is not None
         except Exception as exc:
-            logger.exception("Failed to check employee exists: employee_id=%s", employee_id)
+            logger.exception(
+                "Failed to check employee exists: employee_id=%s", employee_id
+            )
             raise DatabaseException("Failed to check employee exists") from exc
 
-    async def get_employee_status(self, employee_id: uuid.UUID) -> EmployeeStatus | None:
+    async def get_employee_status(
+        self, employee_id: uuid.UUID
+    ) -> EmployeeStatus | None:
         try:
             stmt = select(Employee.status).where(Employee.employee_id == employee_id)
             return await self.db.scalar(stmt)
         except Exception as exc:
-            logger.exception("Failed to get employee status: employee_id=%s", employee_id)
+            logger.exception(
+                "Failed to get employee status: employee_id=%s", employee_id
+            )
             raise DatabaseException("Failed to get employee status") from exc
 
     async def get_event_by_id(self, event_id: uuid.UUID) -> AttendanceEvent | None:
@@ -57,6 +69,7 @@ class AttendanceRepo:
     async def list_events(
         self,
         query: schemas.AttendanceEventListQuery,
+        visible_employee_ids: set[uuid.UUID] | None = None,
     ) -> list[AttendanceEvent]:
         try:
             stmt: Select = select(AttendanceEvent)
@@ -71,12 +84,18 @@ class AttendanceRepo:
                 stmt = stmt.where(AttendanceEvent.event_time >= query.event_time_from)
             if query.event_time_to is not None:
                 stmt = stmt.where(AttendanceEvent.event_time <= query.event_time_to)
+            if visible_employee_ids is not None:
+                if not visible_employee_ids:
+                    return []
+                stmt = stmt.where(AttendanceEvent.employee_id.in_(visible_employee_ids))
 
             stmt = stmt.order_by(
                 AttendanceEvent.event_time.desc(),
                 AttendanceEvent.created_at.desc(),
             )
-            stmt = stmt.offset((query.page - 1) * query.page_size).limit(query.page_size)
+            stmt = stmt.offset((query.page - 1) * query.page_size).limit(
+                query.page_size
+            )
             result = await self.db.execute(stmt)
             return list(result.scalars().all())
         except Exception as exc:
@@ -160,7 +179,9 @@ class AttendanceRepo:
         event_date: date,
     ) -> AttendanceRecord | None:
         try:
-            previous_work_date = self.work_date_to_db_value(event_date - timedelta(days=1))
+            previous_work_date = self.work_date_to_db_value(
+                event_date - timedelta(days=1)
+            )
             stmt = (
                 select(AttendanceRecord)
                 .join(WorkShift, AttendanceRecord.shift_id == WorkShift.shift_id)
@@ -181,14 +202,19 @@ class AttendanceRepo:
                 employee_id,
                 event_date,
             )
-            raise DatabaseException("Failed to get open overnight attendance record") from exc
+            raise DatabaseException(
+                "Failed to get open overnight attendance record"
+            ) from exc
 
     async def list_record(
         self,
         query: schemas.AttendanceRecordListQuery,
+        visible_employee_ids: set[uuid.UUID] | None = None,
     ) -> list[AttendanceRecord]:
         try:
-            stmt: Select = select(AttendanceRecord).options(selectinload(AttendanceRecord.shift))
+            stmt: Select = select(AttendanceRecord).options(
+                selectinload(AttendanceRecord.shift)
+            )
 
             if query.employee_id is not None:
                 stmt = stmt.where(AttendanceRecord.employee_id == query.employee_id)
@@ -196,22 +222,32 @@ class AttendanceRepo:
                 stmt = stmt.where(AttendanceRecord.shift_id == query.shift_id)
             if query.work_date_from is not None:
                 stmt = stmt.where(
-                    AttendanceRecord.work_date >= self.work_date_to_db_value(query.work_date_from)
+                    AttendanceRecord.work_date
+                    >= self.work_date_to_db_value(query.work_date_from)
                 )
             if query.work_date_to is not None:
                 stmt = stmt.where(
-                    AttendanceRecord.work_date <= self.work_date_to_db_value(query.work_date_to)
+                    AttendanceRecord.work_date
+                    <= self.work_date_to_db_value(query.work_date_to)
                 )
             if query.status is not None:
                 stmt = stmt.where(AttendanceRecord.status == query.status)
             if query.source is not None:
                 stmt = stmt.where(AttendanceRecord.source == query.source)
+            if visible_employee_ids is not None:
+                if not visible_employee_ids:
+                    return []
+                stmt = stmt.where(
+                    AttendanceRecord.employee_id.in_(visible_employee_ids)
+                )
 
             stmt = stmt.order_by(
                 AttendanceRecord.work_date.desc(),
                 AttendanceRecord.created_at.desc(),
             )
-            stmt = stmt.offset((query.page - 1) * query.page_size).limit(query.page_size)
+            stmt = stmt.offset((query.page - 1) * query.page_size).limit(
+                query.page_size
+            )
             result = await self.db.execute(stmt)
             return list(result.scalars().all())
         except Exception as exc:
@@ -221,9 +257,12 @@ class AttendanceRepo:
     async def summarize_records(
         self,
         query: schemas.AttendanceRecordSummaryQuery,
+        visible_employee_ids: set[uuid.UUID] | None = None,
     ) -> dict[str, int]:
         try:
-            stmt = select(AttendanceRecord.status, func.count()).group_by(AttendanceRecord.status)
+            stmt = select(AttendanceRecord.status, func.count()).group_by(
+                AttendanceRecord.status
+            )
 
             if query.employee_id is not None:
                 stmt = stmt.where(AttendanceRecord.employee_id == query.employee_id)
@@ -231,11 +270,24 @@ class AttendanceRepo:
                 stmt = stmt.where(AttendanceRecord.shift_id == query.shift_id)
             if query.work_date_from is not None:
                 stmt = stmt.where(
-                    AttendanceRecord.work_date >= self.work_date_to_db_value(query.work_date_from)
+                    AttendanceRecord.work_date
+                    >= self.work_date_to_db_value(query.work_date_from)
                 )
             if query.work_date_to is not None:
                 stmt = stmt.where(
-                    AttendanceRecord.work_date <= self.work_date_to_db_value(query.work_date_to)
+                    AttendanceRecord.work_date
+                    <= self.work_date_to_db_value(query.work_date_to)
+                )
+            if visible_employee_ids is not None:
+                if not visible_employee_ids:
+                    return {
+                        "total_records": 0,
+                        "present_days": 0,
+                        "late_days": 0,
+                        "absent_days": 0,
+                    }
+                stmt = stmt.where(
+                    AttendanceRecord.employee_id.in_(visible_employee_ids)
                 )
 
             result = await self.db.execute(stmt)
@@ -279,6 +331,15 @@ class AttendanceRepo:
             try:
                 await self.db.commit()
                 await self.db.refresh(record)
+            except IntegrityError as exc:
+                await self.db.rollback()
+                logger.info(
+                    "Attendance record uniqueness conflict: record_id=%s",
+                    record.record_id,
+                )
+                raise ConflictException(
+                    "Attendance record already exists for this employee and work date"
+                ) from exc
             except Exception as exc:
                 await self.db.rollback()
                 logger.exception(
@@ -309,6 +370,9 @@ class AttendanceRepo:
     async def flush(self) -> None:
         try:
             await self.db.flush()
+        except IntegrityError:
+            logger.info("Attendance transaction violated a database constraint")
+            raise
         except Exception as exc:
             logger.exception("Failed to flush attendance transaction")
             raise DatabaseException("Failed to flush attendance transaction") from exc
@@ -316,6 +380,9 @@ class AttendanceRepo:
     async def commit(self) -> None:
         try:
             await self.db.commit()
+        except IntegrityError:
+            logger.info("Attendance transaction violated a database constraint")
+            raise
         except Exception as exc:
             logger.exception("Failed to commit attendance transaction")
             raise DatabaseException("Failed to commit attendance transaction") from exc
@@ -325,7 +392,9 @@ class AttendanceRepo:
             await self.db.rollback()
         except Exception as exc:
             logger.exception("Failed to rollback attendance transaction")
-            raise DatabaseException("Failed to rollback attendance transaction") from exc
+            raise DatabaseException(
+                "Failed to rollback attendance transaction"
+            ) from exc
 
     async def refresh(self, obj) -> None:
         try:

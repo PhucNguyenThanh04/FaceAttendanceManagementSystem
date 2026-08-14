@@ -59,6 +59,7 @@ METRICS = {
 }
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RAGAS_MAX_WORKERS = 1  # Bắt buộc chạy tuần tự để tránh dồn request Gemini.
 
 
 def ragas_uses_legacy_schema() -> bool:
@@ -369,7 +370,7 @@ def evaluate_one(
             timeout=int(float(os.getenv("RAGAS_LLM_TIMEOUT", "600"))),
             max_retries=int(os.getenv("RAGAS_MAX_RETRIES", "2")),
             max_wait=int(float(os.getenv("RAGAS_MAX_WAIT", "60"))),
-            max_workers=int(os.getenv("RAGAS_MAX_WORKERS", "4")),
+            max_workers=RAGAS_MAX_WORKERS,
         ),
     }
     if "show_progress" in inspect.signature(evaluate).parameters:

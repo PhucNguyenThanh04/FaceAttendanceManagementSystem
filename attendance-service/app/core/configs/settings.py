@@ -1,5 +1,6 @@
 from pathlib import Path
 from functools import lru_cache
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # root attendance-service
@@ -16,7 +17,7 @@ class Settings(BaseSettings):
     workers: int
     gpu_id: int
     api_key: str
-    debug: bool = True
+    debug: bool = Field(default=True, validation_alias="AI_DEBUG")
 
 
     log_level: str = "INFO"

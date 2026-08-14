@@ -14,3 +14,5 @@ export type CreatePositionPayload = {
   description?: string | null
   is_active: boolean
 }
+
+export type UpdatePositionPayload = Partial<CreatePositionPayload>

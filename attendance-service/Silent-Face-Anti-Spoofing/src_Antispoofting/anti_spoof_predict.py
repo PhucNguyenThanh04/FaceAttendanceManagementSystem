@@ -56,8 +56,20 @@ class Detection:
 class AntiSpoofPredict(Detection):
     def __init__(self, device_id):
         super(AntiSpoofPredict, self).__init__()
-        self.device = torch.device("cuda:{}".format(device_id)
-                                   if torch.cuda.is_available() else "cpu")
+        use_cuda = device_id >= 0 and torch.cuda.is_available()
+        self.device = torch.device(f"cuda:{device_id}" if use_cuda else "cpu")
+        if use_cuda:
+            logger.info(
+                "AntiSpoof torch CUDA enabled: device=%s name=%s",
+                self.device,
+                torch.cuda.get_device_name(device_id),
+            )
+        else:
+            logger.warning(
+                "AntiSpoof using CPU: requested_device=%s torch_cuda_available=%s",
+                device_id,
+                torch.cuda.is_available(),
+            )
 
     def _load_model(self, model_path):
         # define model
@@ -94,7 +106,6 @@ class AntiSpoofPredict(Detection):
             result = self.model.forward(img)
             result = F.softmax(result).cpu().numpy()
         return result
-
 
 
 

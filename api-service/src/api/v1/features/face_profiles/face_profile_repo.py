@@ -53,6 +53,7 @@ class FaceProfileRepo:
         page_size: int = 20,
         employee_id: uuid.UUID | None = None,
         status: FaceProfileStatus | None = None,
+        visible_employee_ids: set[uuid.UUID] | None = None,
     ) -> tuple[list[FaceProfile], int]:
         if page < 1:
             page = 1
@@ -61,6 +62,8 @@ class FaceProfileRepo:
         offset = (page - 1) * page_size
 
         stmt: Select = select(FaceProfile)
+        if visible_employee_ids is not None:
+            stmt = stmt.where(FaceProfile.employee_id.in_(visible_employee_ids))
         if employee_id is not None:
             stmt = stmt.where(FaceProfile.employee_id == employee_id)
         if status is not None:

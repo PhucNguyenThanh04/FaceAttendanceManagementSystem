@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Response, status
 
 from src.api.v1.features.staff.departments import schemas
+from src.api.v1.features.staff.employees import schemas as employee_schemas
 from src.api.v1.features.staff.departments.service import (
     DepartmentService,
     get_department_service,
@@ -28,6 +29,18 @@ async def get_department_by_code(
     _: User = Depends(require_roles(RoleName.admin, RoleName.hr, RoleName.manager)),
 ) -> schemas.DepartmentRead:
     return await service.get_department_by_code(code)
+
+
+@router.get(
+    "/{department_id}/managers",
+    response_model=list[employee_schemas.EmployeeSummary],
+)
+async def list_department_managers(
+    department_id: int,
+    service: DepartmentService = Depends(get_department_service),
+    _: User = Depends(require_roles(RoleName.hr, RoleName.admin)),
+) -> list[employee_schemas.EmployeeSummary]:
+    return await service.list_department_managers(department_id)
 
 
 @router.get("/{department_id}", response_model=schemas.DepartmentRead)

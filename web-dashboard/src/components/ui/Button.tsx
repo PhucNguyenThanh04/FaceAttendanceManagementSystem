@@ -23,6 +23,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
+      aria-busy={isLoading || undefined}
       className={cx('button', `button--${variant}`, `button--${size}`, className)}
       disabled={disabled || isLoading}
       type={type}

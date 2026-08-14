@@ -8,11 +8,28 @@ import { DepartmentForm } from '@/features/departments/components/DepartmentForm
 import { DepartmentTable } from '@/features/departments/components/DepartmentTable'
 import { useDepartments } from '@/features/departments/hooks/useDepartments'
 import { getApiErrorMessage } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth.store'
+import type { Department } from '@/features/departments/types/department.types'
+import { useDeactivateDepartment, useDeleteDepartment } from '@/features/departments/hooks/useCreateDepartment'
 
 export function DepartmentListPage() {
   const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState<Department | null>(null)
+  const isAdmin = useAuthStore((state) => state.user?.role_name === 'admin')
   const departmentsQuery = useDepartments(search)
   const departments = departmentsQuery.data ?? []
+  const deactivateMutation = useDeactivateDepartment()
+  const deleteMutation = useDeleteDepartment()
+  const mutationError = deactivateMutation.error || deleteMutation.error
+
+  const deactivate = (department: Department) => {
+    if (window.confirm(`Tạm ngưng phòng ban “${department.name}”?`)) deactivateMutation.mutate(department.department_id)
+  }
+  const remove = (department: Department) => {
+    if (window.confirm(`Xóa vĩnh viễn phòng ban “${department.name}”? Chỉ thực hiện được khi không còn dữ liệu liên quan.`)) {
+      deleteMutation.mutate(department.department_id, { onSuccess: () => selected?.department_id === department.department_id && setSelected(null) })
+    }
+  }
 
   return (
     <section className="page-grid">
@@ -34,14 +51,15 @@ export function DepartmentListPage() {
             {getApiErrorMessage(departmentsQuery.error, 'Không thể tải danh sách phòng ban.')}
           </StatusMessage>
         ) : null}
+        {mutationError ? <StatusMessage tone="error">{getApiErrorMessage(mutationError, 'Không thể cập nhật phòng ban.')}</StatusMessage> : null}
         {!departmentsQuery.isLoading && !departmentsQuery.isError && departments.length === 0 ? (
           <EmptyState title="Chưa có phòng ban" />
         ) : null}
-        {departments.length > 0 ? <DepartmentTable departments={departments} /> : null}
+        {departments.length > 0 ? <DepartmentTable canManage={isAdmin} departments={departments} isMutating={deactivateMutation.isPending || deleteMutation.isPending} onDeactivate={deactivate} onDelete={remove} onEdit={setSelected} /> : null}
       </div>
       <aside className="side-panel">
-        <h2>Tạo phòng ban</h2>
-        <DepartmentForm />
+        <h2>{selected ? 'Cập nhật phòng ban' : 'Tạo phòng ban'}</h2>
+        {isAdmin ? <DepartmentForm department={selected} onCancel={() => setSelected(null)} onSaved={() => setSelected(null)} /> : <StatusMessage>HR có quyền tra cứu. Chỉ admin được thay đổi danh mục phòng ban.</StatusMessage>}
       </aside>
     </section>
   )

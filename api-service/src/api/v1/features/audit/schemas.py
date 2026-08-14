@@ -48,3 +48,10 @@ class AuditLogListQuery(BaseModel):
         if self.created_from and self.created_to and self.created_to < self.created_from:
             raise ValueError("created_to must be on/after created_from")
         return self
+
+
+class AuditLogListResponse(BaseModel):
+    items: list[AuditLogRead]
+    total: int
+    page: int
+    page_size: int

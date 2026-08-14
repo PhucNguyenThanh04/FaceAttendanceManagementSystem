@@ -17,6 +17,7 @@ from src.core.clients.face_server.clients import FaceServerClient
 from src.core.clients.face_server.schemas import AICommitRequest, AIPayloadCreateRequest
 from src.core.configs.settings import settings
 from src.core.dependencies.dep import get_ai_http_client, get_redis_client
+from src.core.exceptions import UploadQuotaExceededException
 from src.core.security.authentication import hash_password
 from src.api.v1.shared.enums import FaceProfileStatus, RoleName, UserStatus
 from src.utils.exeptions import (
@@ -28,6 +29,14 @@ from src.utils.exeptions import (
 from src.utils.setup_logger import setup_logger
 
 logger = setup_logger(__name__)
+
+CONSUME_UPLOAD_ATTEMPT_SCRIPT = """
+local count = redis.call("INCR", KEYS[1])
+if count == 1 then
+    redis.call("EXPIRE", KEYS[1], ARGV[1])
+end
+return count
+"""
 
 
 class EmployeeOnboardingService:
@@ -48,6 +57,10 @@ class EmployeeOnboardingService:
     @staticmethod
     def _session_key(session_id: str) -> str:
         return f"onboarding:session:{session_id}"
+
+    @staticmethod
+    def _upload_attempt_key(session_id: str) -> str:
+        return f"onboarding:upload-attempts:{session_id}"
 
     @staticmethod
     def _utc_now() -> datetime:
@@ -71,7 +84,10 @@ class EmployeeOnboardingService:
     async def _save_session_state(self, state: schemas.EmployeeOnboardingSessionState) -> None:
         ttl_seconds = int((state.expires_at - self._utc_now()).total_seconds())
         if ttl_seconds <= 0:
-            await self.redis_client.delete(self._session_key(state.session_id))
+            await self.redis_client.delete(
+                self._session_key(state.session_id),
+                self._upload_attempt_key(state.session_id),
+            )
             raise BadRequestException("Onboarding session expired")
 
         await self.redis_client.set(
@@ -90,7 +106,10 @@ class EmployeeOnboardingService:
 
         state = schemas.EmployeeOnboardingSessionState.model_validate_json(raw)
         if state.expires_at <= self._utc_now():
-            await self.redis_client.delete(self._session_key(session_id))
+            await self.redis_client.delete(
+                self._session_key(session_id),
+                self._upload_attempt_key(session_id),
+            )
             raise BadRequestException("Onboarding session expired")
         return state
 
@@ -154,6 +173,12 @@ class EmployeeOnboardingService:
         }:
             raise BadRequestException(f"Session is not accepting images: {state.status.value}")
 
+        ttl_seconds = max(
+            1,
+            int((state.expires_at - self._utc_now()).total_seconds()),
+        )
+        await self._consume_upload_attempt(session_id, ttl_seconds)
+
         try:
             ai_result = await self.face_server_client.add_photo(
                 session_id=session_id,
@@ -192,6 +217,28 @@ class EmployeeOnboardingService:
             min_required_photos=state.min_required_photos,
             ready_to_commit=ready,
         )
+
+    async def _consume_upload_attempt(
+        self,
+        session_id: str,
+        ttl_seconds: int,
+    ) -> None:
+        attempt_count = int(
+            await self.redis_client.eval(
+                CONSUME_UPLOAD_ATTEMPT_SCRIPT,
+                1,
+                self._upload_attempt_key(session_id),
+                ttl_seconds,
+            )
+        )
+        max_attempts = settings.onboarding_max_upload_attempts_per_session
+        if max_attempts <= 0:
+            raise RuntimeError("onboarding upload attempt limit must be positive")
+        if attempt_count > max_attempts:
+            raise UploadQuotaExceededException(
+                "Onboarding session upload-attempt quota exceeded",
+                detail={"max_attempts": max_attempts},
+            )
 
     async def _mark_session_failed(self, state: schemas.EmployeeOnboardingSessionState, reason: str) -> None:
         state.status = schemas.OnboardingSessionStatus.failed
@@ -336,7 +383,10 @@ class EmployeeOnboardingService:
             state.employee_code = employee.employee_code
             state.last_error = None
             state.updated_at = self._utc_now()
-            await self.redis_client.delete(self._session_key(session_id))
+            await self.redis_client.delete(
+                self._session_key(session_id),
+                self._upload_attempt_key(session_id),
+            )
             logger.info("Onboarding session cleaned after commit: session_id=%s", session_id)
 
             return schemas.EmployeeOnboardingCommitResponse(
@@ -385,7 +435,10 @@ class EmployeeOnboardingService:
             logger.exception("AI cancel enrollment failed: session_id=%s", session_id)
             raise MLProcessingException(step="cancel", reason=str(exc), task_id=session_id) from exc
 
-        await self.redis_client.delete(self._session_key(session_id))
+        await self.redis_client.delete(
+            self._session_key(session_id),
+            self._upload_attempt_key(session_id),
+        )
         logger.info(
             "Onboarding session cancelled: session_id=%s cancelled_by=%s",
             session_id,

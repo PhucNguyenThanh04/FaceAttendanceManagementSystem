@@ -18,6 +18,7 @@ import { LeaveBalanceSummary } from '../components/LeaveBalanceSummary'
 import { LeaveRequestTable } from '../components/LeaveRequestTable'
 import { LeaveRequestFormModal } from '../components/LeaveRequestFormModal'
 import { ReviewLeaveRequestModal } from '../components/ReviewLeaveRequestModal'
+import { LeaveTypeManager } from '../components/LeaveTypeManager'
 import { getApiErrorMessage } from '@/lib/utils'
 import type { LeaveRequest, LeaveRequestStatus } from '../types/leave.types'
 
@@ -31,6 +32,7 @@ export function LeavePage() {
   // Modals state
   const [isRequestFormOpen, setIsRequestFormOpen] = useState(false)
   const [requestToReview, setRequestToReview] = useState<LeaveRequest | null>(null)
+  const [isTypeManagerOpen, setIsTypeManagerOpen] = useState(false)
 
   // Filters state - Personal View
   const [myStatusFilter, setMyStatusFilter] = useState<LeaveRequestStatus | ''>('')
@@ -92,7 +94,7 @@ export function LeavePage() {
       map.set(myProfileQuery.data.employee_id, myProfileQuery.data.full_name)
     }
     return map
-  }, [employeesQuery.data?.items, myProfileQuery.data])
+  }, [employeesQuery.data, myProfileQuery.data])
 
   const leaveTypeNames = useMemo(() => {
     const map = new Map<number, string>()
@@ -120,17 +122,15 @@ export function LeavePage() {
   return (
     <section className="page-stack">
       <PageHeader
-        actions={
-          myProfileQuery.data ? (
-            <Button onClick={() => setIsRequestFormOpen(true)} variant="primary">
-              Đăng ký nghỉ phép
-            </Button>
-          ) : null
-        }
+        actions={<>
+          {role === 'admin' || role === 'hr' ? <Button onClick={() => setIsTypeManagerOpen(true)} variant="secondary">Cấu hình loại phép</Button> : null}
+          {myProfileQuery.data ? <Button onClick={() => setIsRequestFormOpen(true)} variant="primary">Đăng ký nghỉ phép</Button> : null}
+        </>}
         description="Quản lý và phê duyệt đơn nghỉ phép của bạn hoặc nhân viên cấp dưới."
         eyebrow="Human resources"
         title="Nghỉ phép"
       />
+      {isTypeManagerOpen ? <LeaveTypeManager onClose={() => setIsTypeManagerOpen(false)} /> : null}
 
       {/* Tab toggle buttons for manager/hr/admin */}
       {!isEmployee ? (

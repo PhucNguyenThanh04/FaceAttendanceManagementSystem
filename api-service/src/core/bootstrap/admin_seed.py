@@ -23,6 +23,17 @@ SYSTEM_DEPARTMENT_CODE = "SYS"
 SYSTEM_POSITION_NAME = "System Administrator"
 SYSTEM_POSITION_CODE = "SYS_ADMIN"
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+KNOWN_ENVIRONMENTS = {
+    "dev": "development",
+    "development": "development",
+    "local": "development",
+    "prod": "production",
+    "production": "production",
+    "stage": "staging",
+    "staging": "staging",
+    "test": "test",
+    "testing": "test",
+}
 
 
 @dataclass(frozen=True)
@@ -32,11 +43,18 @@ class BootstrapIdentity:
     full_name: str
 
 
-def _is_production_environment() -> bool:
-    return settings.environment.strip().lower() in {"production", "prod"}
+def _validated_environment() -> str:
+    configured = settings.environment.strip().lower()
+    try:
+        return KNOWN_ENVIRONMENTS[configured]
+    except KeyError as exc:
+        raise ValueError(
+            "bootstrap admin is not allowed for an unknown environment"
+        ) from exc
 
 
 def _validate_bootstrap_identity() -> BootstrapIdentity:
+    _validated_environment()
     email = settings.bootstrap_admin_email.strip().lower()
     password = settings.bootstrap_admin_password
     full_name = settings.bootstrap_admin_full_name.strip()
@@ -45,19 +63,21 @@ def _validate_bootstrap_identity() -> BootstrapIdentity:
         raise ValueError("bootstrap_admin_email must not be empty")
     if not EMAIL_PATTERN.match(email):
         raise ValueError("bootstrap_admin_email is not a valid email")
-    if len(password) < 8:
-        raise ValueError("bootstrap_admin_password must be at least 8 characters")
-    if not full_name:
-        raise ValueError("bootstrap_admin_full_name must not be empty")
-
+    if email == DEFAULT_ADMIN_EMAIL or password == DEFAULT_ADMIN_PASSWORD:
+        raise ValueError("Known default bootstrap admin credentials are not allowed")
     if (
-        _is_production_environment()
-        and email == DEFAULT_ADMIN_EMAIL
-        and password == DEFAULT_ADMIN_PASSWORD
+        len(password) < 12
+        or not any(character.islower() for character in password)
+        or not any(character.isupper() for character in password)
+        or not any(character.isdigit() for character in password)
+        or not any(not character.isalnum() for character in password)
     ):
         raise ValueError(
-            "Default bootstrap admin credentials are not allowed in production"
+            "bootstrap_admin_password must be at least 12 characters and include "
+            "uppercase, lowercase, numeric and special characters"
         )
+    if not full_name:
+        raise ValueError("bootstrap_admin_full_name must not be empty")
 
     return BootstrapIdentity(email=email, password=password, full_name=full_name)
 
@@ -150,14 +170,14 @@ async def ensure_admin_user(
         logger.info("created admin user: %s", identity.email)
         return admin_user, True
 
-    updated = False
-    if admin_user.role_id != role.role_id:
-        admin_user.role_id = role.role_id
-        updated = True
-    if admin_user.status != UserStatus.active:
-        admin_user.status = UserStatus.active
-        updated = True
-    return admin_user, updated
+    if (
+        admin_user.role_id != role.role_id
+        or admin_user.status != UserStatus.active
+    ):
+        raise RuntimeError(
+            "bootstrap email belongs to an existing non-admin or inactive account"
+        )
+    return admin_user, False
 
 
 async def ensure_admin_staff(
@@ -166,11 +186,17 @@ async def ensure_admin_staff(
     full_name: str,
     department: Department,
     position: Position,
+    *,
+    allow_create: bool,
 ) -> tuple[Employee, bool]:
     admin_staff = await session.scalar(
         select(Employee).where(Employee.user_id == admin_user.user_id)
     )
     if admin_staff is None:
+        if not allow_create:
+            raise RuntimeError(
+                "bootstrap admin already exists without its expected employee record"
+            )
         employee_code = await generate_admin_employee_code(session)
         admin_staff = Employee(
             user_id=admin_user.user_id,
@@ -185,17 +211,15 @@ async def ensure_admin_staff(
         logger.info("created admin staff: %s", employee_code)
         return admin_staff, True
 
-    updated = False
-    if admin_staff.status != EmployeeStatus.active:
-        admin_staff.status = EmployeeStatus.active
-        updated = True
-    if admin_staff.department_id != department.department_id:
-        admin_staff.department_id = department.department_id
-        updated = True
-    if admin_staff.position_id != position.position_id:
-        admin_staff.position_id = position.position_id
-        updated = True
-    return admin_staff, updated
+    if (
+        admin_staff.status != EmployeeStatus.active
+        or admin_staff.department_id != department.department_id
+        or admin_staff.position_id != position.position_id
+    ):
+        raise RuntimeError(
+            "bootstrap admin employee record exists with unexpected attributes"
+        )
+    return admin_staff, False
 
 
 async def ensure_bootstrap_admin() -> None:
@@ -211,18 +235,19 @@ async def ensure_bootstrap_admin() -> None:
             department = await get_or_create_system_department(session)
             position = await get_or_create_system_position(session)
 
-            admin_user, user_updated = await ensure_admin_user(session, identity, role)
-            admin_staff, staff_updated = await ensure_admin_staff(
+            admin_user, user_created = await ensure_admin_user(session, identity, role)
+            _admin_staff, staff_created = await ensure_admin_staff(
                 session=session,
                 admin_user=admin_user,
                 full_name=identity.full_name,
                 department=department,
                 position=position,
+                allow_create=user_created,
             )
 
-            if not user_updated and not staff_updated:
-                logger.info("admin already exists: %s", identity.email)
-            elif not (admin_user and admin_staff):
-                logger.warning("bootstrap state unexpected for admin: %s", identity.email)
+            if not user_created and not staff_created:
+                logger.info("bootstrap admin is already provisioned: %s", identity.email)
+            elif user_created and staff_created:
+                logger.info("bootstrap admin created: %s", identity.email)
             else:
-                logger.info("admin updated: %s", identity.email)
+                raise RuntimeError("bootstrap admin transaction is incomplete")

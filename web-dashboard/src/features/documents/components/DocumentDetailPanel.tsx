@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Loading } from '@/components/ui/Loading'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { DocumentStatusBadge } from '@/features/documents/components/DocumentStatusBadge'
+import { documentApi } from '@/features/documents/api/document.api'
 import { useDocumentDetail } from '@/features/documents/hooks/useDocumentDetail'
 import { formatDateTime, getApiErrorMessage } from '@/lib/utils'
 
@@ -10,6 +12,8 @@ type DocumentDetailPanelProps = {
 }
 
 export function DocumentDetailPanel({ documentId }: DocumentDetailPanelProps) {
+  const [downloadError, setDownloadError] = useState<unknown>(null)
+  const [isDownloading, setIsDownloading] = useState(false)
   const detailQuery = useDocumentDetail(documentId)
   const document = detailQuery.data
 
@@ -31,6 +35,26 @@ export function DocumentDetailPanel({ documentId }: DocumentDetailPanelProps) {
 
   if (!document) {
     return null
+  }
+
+  const handleDownload = async () => {
+    try {
+      setDownloadError(null)
+      setIsDownloading(true)
+      const blob = await documentApi.downloadDocument(document.id)
+      const url = URL.createObjectURL(blob)
+      const anchor = window.document.createElement('a')
+      anchor.href = url
+      anchor.download = document.file_name
+      window.document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      setDownloadError(error)
+    } finally {
+      setIsDownloading(false)
+    }
   }
 
   return (
@@ -68,11 +92,17 @@ export function DocumentDetailPanel({ documentId }: DocumentDetailPanelProps) {
         <strong>{formatDateTime(document.created_at)}</strong>
       </div>
       <Button
-        onClick={() => window.open(document.file_url, '_blank', 'noopener,noreferrer')}
+        isLoading={isDownloading}
+        onClick={handleDownload}
         variant="secondary"
       >
-        Mở file
+        Tải file an toàn
       </Button>
+      {downloadError ? (
+        <StatusMessage tone="error">
+          {getApiErrorMessage(downloadError, 'Không thể tải tài liệu.')}
+        </StatusMessage>
+      ) : null}
     </div>
   )
 }

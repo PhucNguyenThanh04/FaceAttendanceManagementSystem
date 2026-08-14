@@ -1,41 +1,44 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, UploadFile, File, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 
-from src.core.dependencies.auth import get_current_user
 from src.api.v1.features.users.models import User
-from src.core.exceptions import BadRequestException
+from src.core.configs.settings import settings
+from src.core.dependencies.auth import get_current_user
+from src.core.uploads.security import (
+    atomic_write_with_quota,
+    read_upload_limited,
+    validate_image_upload,
+)
 
 router = APIRouter(prefix="/upload", tags=["Upload"])
 
 BASE_DIR = Path(__file__).resolve().parents[5]
 UPLOAD_DIR = BASE_DIR / "uploads" / "avatars"
-ALLOWED_TYPES = {
-    "image/jpeg": ".jpg",
-    "image/jpg": ".jpg",
-    "image/png": ".png",
-}
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_FILE_SIZE = settings.avatar_upload_max_bytes
+AVATAR_STORAGE_QUOTA = settings.avatar_storage_quota_bytes
 
 
 async def _save_avatar_image(file: UploadFile) -> dict[str, str]:
-    if file.content_type not in ALLOWED_TYPES:
-        raise BadRequestException("Only JPG and PNG images are allowed")
-
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise BadRequestException("File size must be less than 5MB")
-
-    if not content:
-        raise BadRequestException("Empty file is not allowed")
-
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-    extension = ALLOWED_TYPES[file.content_type]
-    filename = f"{uuid.uuid4()}{extension}"
+    content = await read_upload_limited(
+        file,
+        max_bytes=MAX_FILE_SIZE,
+        chunk_size=settings.upload_chunk_size_bytes,
+    )
+    validated_upload = validate_image_upload(
+        filename=file.filename or "",
+        declared_media_type=file.content_type,
+        content=content,
+    )
+    filename = f"{uuid.uuid4()}{validated_upload.extension}"
     file_path = UPLOAD_DIR / filename
-    file_path.write_bytes(content)
+    await atomic_write_with_quota(
+        storage_root=UPLOAD_DIR,
+        destination=file_path,
+        content=validated_upload.content,
+        quota_bytes=AVATAR_STORAGE_QUOTA,
+    )
 
     return {
         "image_url": f"/uploads/avatars/{filename}",

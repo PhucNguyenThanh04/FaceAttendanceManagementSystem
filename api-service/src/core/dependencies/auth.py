@@ -1,4 +1,3 @@
-
 import secrets
 from typing import Annotated
 
@@ -14,14 +13,14 @@ from src.core.security.authentication import build_access_token_blacklist_key
 from src.api.v1.features.users.models import User
 from src.api.v1.features.staff.models import Employee
 from src.api.v1.shared.enums import RoleName, UserStatus
-from src.core.exceptions import ForbiddenException, NotFoundException, UnauthorizedException
+from src.core.exceptions import (
+    ForbiddenException,
+    NotFoundException,
+    UnauthorizedException,
+)
 
 
 bearer_scheme = HTTPBearer(scheme_name="BearerAuth")
-optional_bearer_scheme = HTTPBearer(
-    scheme_name="BearerAuth",
-    auto_error=False,
-)
 
 _attendance_api_key_header = APIKeyHeader(
     name="Attendance-API-Key",
@@ -29,14 +28,16 @@ _attendance_api_key_header = APIKeyHeader(
     auto_error=False,
 )
 
-_rag_api_key_header = APIKeyHeader(
-    name="Rag-API-Key",
-    scheme_name="RagAPIKey",
+_internal_api_key_header = APIKeyHeader(
+    name="Internal-API-Key",
+    scheme_name="InternalAPIKey",
     auto_error=False,
 )
 
 
-async def verify_api_key_attendance(api_key: str | None = Security(_attendance_api_key_header)) -> None:
+async def verify_api_key_attendance(
+    api_key: str | None = Security(_attendance_api_key_header),
+) -> None:
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -50,56 +51,24 @@ async def verify_api_key_attendance(api_key: str | None = Security(_attendance_a
         )
 
 
-async def get_current_user_or_rag_api_key(
-    request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    credentials: HTTPAuthorizationCredentials | None = Security(optional_bearer_scheme),
-    rag_api_key: str | None = Security(_rag_api_key_header),
-) -> User | None:
-    # Nhánh internal — agentic-rag gọi
-    if rag_api_key:
-        if not secrets.compare_digest(rag_api_key, settings.rag_api_key):
-            raise UnauthorizedException("Rag API key không hợp lệ")
-        return None
-
-    # Nhánh JWT — frontend gọi
-    if credentials is None:
-        raise UnauthorizedException("Token không hợp lệ hoặc đã hết hạn")
-
-    credentials_exception = UnauthorizedException("Token không hợp lệ hoặc đã hết hạn")
-    try:
-        payload = jwt.decode(
-            credentials.credentials,
-            settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm],
+async def verify_internal_api_key(
+    api_key: str | None = Security(_internal_api_key_header),
+) -> None:
+    if not settings.internal_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Internal API key is not configured",
         )
-        user_id: str = payload.get("sub")
-        token_version_claim = payload.get("token_version")
-        jti_claim = payload.get("jti")
-        if user_id is None:
-            raise credentials_exception
-        if token_version_claim is None:
-            raise credentials_exception
-        if jti_claim is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-
-    redis_client = getattr(request.app.state, "redis", None)
-    if redis_client is not None:
-        is_blacklisted = await redis_client.get(build_access_token_blacklist_key(str(jti_claim)))
-        if is_blacklisted:
-            raise credentials_exception
-
-    result = await db.execute(select(User).where(User.user_id == user_id))
-    user = result.scalar_one_or_none()
-    if user is None:
-        raise credentials_exception
-    if int(token_version_claim) != int(user.token_version):
-        raise credentials_exception
-    if user.status != UserStatus.active:
-        raise ForbiddenException("Tài khoản đã bị khóa hoặc vô hiệu hóa")
-    return user
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing internal API key",
+        )
+    if not secrets.compare_digest(api_key, settings.internal_api_key):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid internal API key",
+        )
 
 
 async def get_current_user(
@@ -114,10 +83,14 @@ async def get_current_user(
             credentials.credentials,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
         )
         user_id: str = payload.get("sub")
         token_version_claim = payload.get("token_version")
         jti_claim = payload.get("jti")
+        if payload.get("type") != "access":
+            raise credentials_exception
         if user_id is None:
             raise credentials_exception
         if token_version_claim is None:
@@ -129,7 +102,9 @@ async def get_current_user(
 
     redis_client = getattr(request.app.state, "redis", None)
     if redis_client is not None:
-        is_blacklisted = await redis_client.get(build_access_token_blacklist_key(str(jti_claim)))
+        is_blacklisted = await redis_client.get(
+            build_access_token_blacklist_key(str(jti_claim))
+        )
         if is_blacklisted:
             raise credentials_exception
 
@@ -143,6 +118,18 @@ async def get_current_user(
     if user.status != UserStatus.active:
         raise ForbiddenException("Tài khoản đã bị khóa hoặc vô hiệu hóa")
     return user
+
+
+async def get_current_access_token(
+    credentials: Annotated[HTTPAuthorizationCredentials, Security(bearer_scheme)],
+    _: Annotated[User, Depends(get_current_user)],
+) -> str:
+    """Return the already-validated access token for request-scoped forwarding.
+
+    Callers must never persist or log this value. Depending on get_current_user
+    ensures revoked, stale, inactive, and malformed tokens cannot be forwarded.
+    """
+    return credentials.credentials
 
 
 async def get_current_employee(
@@ -168,13 +155,15 @@ def require_roles(*roles: RoleName):
     Hoặc:
         current_user: User = Depends(require_roles(RoleName.hr, RoleName.admin))
     """
-    async def _check(
-        current_user: Annotated[User, Depends(get_current_user)]
-    ) -> User:
+
+    async def _check(current_user: Annotated[User, Depends(get_current_user)]) -> User:
         user_role = current_user.role.name
         if user_role not in roles:
-            raise ForbiddenException(f"Yêu cầu quyền: {', '.join(r.value for r in roles)}")
+            raise ForbiddenException(
+                f"Yêu cầu quyền: {', '.join(r.value for r in roles)}"
+            )
         return current_user
+
     return _check
 
 

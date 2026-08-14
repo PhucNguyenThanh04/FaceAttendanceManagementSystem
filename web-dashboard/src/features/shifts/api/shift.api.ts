@@ -9,9 +9,26 @@ import type {
   UpdateWorkShiftPayload,
   WorkShift,
   WorkShiftListParams,
+  Holiday,
+  HolidayPayload,
 } from '@/features/shifts/types/shift.types'
 
 export const shiftApi = {
+  listHolidays: async (year: number): Promise<Holiday[]> => {
+    const response = await api.get<Holiday[]>('/holidays', { params: { year } })
+    return response.data
+  },
+  createHoliday: async (payload: HolidayPayload): Promise<Holiday> => {
+    const response = await api.post<Holiday>('/holidays', payload)
+    return response.data
+  },
+  updateHoliday: async (holidayId: number, payload: Partial<HolidayPayload>): Promise<Holiday> => {
+    const response = await api.patch<Holiday>(`/holidays/${holidayId}`, payload)
+    return response.data
+  },
+  deleteHoliday: async (holidayId: number): Promise<void> => {
+    await api.delete(`/holidays/${holidayId}`)
+  },
   listWorkShifts: async (params: WorkShiftListParams = {}): Promise<WorkShift[]> => {
     const response = await api.get<WorkShift[]>('/work-shifts/', { params })
     return response.data

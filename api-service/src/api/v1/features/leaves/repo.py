@@ -41,7 +41,9 @@ class LeaveRepo:
 
     async def employee_exists(self, employee_id: uuid.UUID) -> bool:
         try:
-            stmt = select(Employee.employee_id).where(Employee.employee_id == employee_id)
+            stmt = select(Employee.employee_id).where(
+                Employee.employee_id == employee_id
+            )
             return (await self.db.execute(stmt)).first() is not None
         except Exception as exc:
             logger.exception("Failed to check employee: employee_id=%s", employee_id)
@@ -55,7 +57,9 @@ class LeaveRepo:
             )
             return (await self.db.execute(stmt)).first() is not None
         except Exception as exc:
-            logger.exception("Failed to check leave type: leave_type_id=%s", leave_type_id)
+            logger.exception(
+                "Failed to check leave type: leave_type_id=%s", leave_type_id
+            )
             raise DatabaseException("Failed to check leave type") from exc
 
     async def leave_type_name_exists(
@@ -84,7 +88,9 @@ class LeaveRepo:
             normalized_code = self._normalize_optional(code)
             if normalized_code is None:
                 return False
-            stmt = select(LeaveType.leave_type_id).where(LeaveType.code == normalized_code)
+            stmt = select(LeaveType.leave_type_id).where(
+                LeaveType.code == normalized_code
+            )
             if exclude_leave_type_id is not None:
                 stmt = stmt.where(LeaveType.leave_type_id != exclude_leave_type_id)
             return (await self.db.execute(stmt)).first() is not None
@@ -97,7 +103,9 @@ class LeaveRepo:
             stmt = select(LeaveType).where(LeaveType.leave_type_id == leave_type_id)
             return await self.db.scalar(stmt)
         except Exception as exc:
-            logger.exception("Failed to get leave type: leave_type_id=%s", leave_type_id)
+            logger.exception(
+                "Failed to get leave type: leave_type_id=%s", leave_type_id
+            )
             raise DatabaseException("Failed to get leave type") from exc
 
     async def list_leave_types(self) -> list[LeaveType]:
@@ -122,7 +130,9 @@ class LeaveRepo:
         try:
             year_start = date(year, 1, 1)
             year_end = date(year, 12, 31)
-            used_days = func.coalesce(func.sum(LeaveRequest.total_days), 0.0).label("used_days")
+            used_days = func.coalesce(func.sum(LeaveRequest.total_days), 0.0).label(
+                "used_days"
+            )
             stmt = (
                 select(LeaveType, used_days)
                 .outerjoin(
@@ -194,7 +204,10 @@ class LeaveRepo:
                 changed = True
 
         for field in ("is_paid", "max_days_per_year", "description", "is_active"):
-            if field in update_data and getattr(leave_type, field) != update_data[field]:
+            if (
+                field in update_data
+                and getattr(leave_type, field) != update_data[field]
+            ):
                 setattr(leave_type, field, update_data[field])
                 changed = True
 
@@ -215,9 +228,12 @@ class LeaveRepo:
     async def list_leave_requests(
         self,
         query: schemas.LeaveRequestListQuery,
+        visible_employee_ids: set[uuid.UUID] | None = None,
     ) -> tuple[list[LeaveRequest], int]:
         try:
-            stmt: Select = select(LeaveRequest).options(selectinload(LeaveRequest.leave_type))
+            stmt: Select = select(LeaveRequest).options(
+                selectinload(LeaveRequest.leave_type)
+            )
 
             if query.employee_id is not None:
                 stmt = stmt.where(LeaveRequest.employee_id == query.employee_id)
@@ -229,12 +245,20 @@ class LeaveRepo:
                 stmt = stmt.where(LeaveRequest.start_date >= query.start_from)
             if query.start_to is not None:
                 stmt = stmt.where(LeaveRequest.start_date <= query.start_to)
+            if visible_employee_ids is not None:
+                if not visible_employee_ids:
+                    return [], 0
+                stmt = stmt.where(LeaveRequest.employee_id.in_(visible_employee_ids))
 
-            count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
+            count_stmt = select(func.count()).select_from(
+                stmt.order_by(None).subquery()
+            )
             total = int((await self.db.scalar(count_stmt)) or 0)
 
             stmt = stmt.order_by(LeaveRequest.created_at.desc())
-            stmt = stmt.offset((query.page - 1) * query.page_size).limit(query.page_size)
+            stmt = stmt.offset((query.page - 1) * query.page_size).limit(
+                query.page_size
+            )
             result = await self.db.execute(stmt)
             return list(result.scalars().all()), total
         except Exception as exc:
@@ -287,7 +311,9 @@ class LeaveRepo:
                 start_date,
                 end_date,
             )
-            raise DatabaseException("Failed to check overlapping leave request") from exc
+            raise DatabaseException(
+                "Failed to check overlapping leave request"
+            ) from exc
 
     async def create_leave_request(
         self,
@@ -325,7 +351,9 @@ class LeaveRepo:
             raise DatabaseException("Failed to reload created leave request")
         return created
 
-    async def get_leave_request_by_id(self, request_id: uuid.UUID) -> LeaveRequest | None:
+    async def get_leave_request_by_id(
+        self, request_id: uuid.UUID
+    ) -> LeaveRequest | None:
         try:
             stmt: Select = (
                 select(LeaveRequest)
@@ -345,12 +373,16 @@ class LeaveRepo:
             stmt = (
                 select(LeaveApprovalLog)
                 .where(LeaveApprovalLog.leave_request_id == request_id)
-                .order_by(LeaveApprovalLog.created_at.asc(), LeaveApprovalLog.log_id.asc())
+                .order_by(
+                    LeaveApprovalLog.created_at.asc(), LeaveApprovalLog.log_id.asc()
+                )
             )
             result = await self.db.execute(stmt)
             return list(result.scalars().all())
         except Exception as exc:
-            logger.exception("Failed to list leave approval logs: request_id=%s", request_id)
+            logger.exception(
+                "Failed to list leave approval logs: request_id=%s", request_id
+            )
             raise DatabaseException("Failed to list leave approval logs") from exc
 
     async def update_leave_request(
@@ -371,7 +403,10 @@ class LeaveRepo:
         changed = False
 
         for field in editable_fields:
-            if field in update_data and getattr(leave_request, field) != update_data[field]:
+            if (
+                field in update_data
+                and getattr(leave_request, field) != update_data[field]
+            ):
                 setattr(leave_request, field, update_data[field])
                 changed = True
 

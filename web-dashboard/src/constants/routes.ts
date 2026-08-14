@@ -8,6 +8,7 @@ export const routeSegments = {
   faceProfiles: 'face-profiles',
   onboarding: 'employee-onboarding',
   attendance: 'attendance',
+  reports: 'reports',
   leave: 'leave',
   corrections: 'corrections',
   auditLogs: 'audit-logs',
@@ -29,6 +30,7 @@ export const routePaths = {
   faceProfiles: `/${routeSegments.faceProfiles}`,
   onboarding: `/${routeSegments.onboarding}`,
   attendance: `/${routeSegments.attendance}`,
+  reports: `/${routeSegments.reports}`,
   leave: `/${routeSegments.leave}`,
   corrections: `/${routeSegments.corrections}`,
   auditLogs: `/${routeSegments.auditLogs}`,
@@ -52,13 +54,13 @@ const adminNavigationItems: NavigationItem[] = [
   { label: 'Ca làm việc', path: routePaths.shifts },
   { label: 'Face profiles', path: routePaths.faceProfiles },
   { label: 'Chấm công', path: routePaths.attendance },
+  { label: 'Báo cáo', path: routePaths.reports },
   { label: 'Sửa công', path: routePaths.corrections },
   { label: 'Nghỉ phép', path: routePaths.leave },
   { label: 'Audit logs', path: routePaths.auditLogs },
-  { label: 'Thông báo', path: routePaths.notifications },
   { label: 'Tài liệu RAG', path: routePaths.documents },
   { label: 'Chatbox', path: routePaths.chatbox },
-  { label: 'Cài đặt', path: routePaths.settings },
+  { label: 'Tài khoản & phân quyền', path: routePaths.settings },
 ]
 
 const hrNavigationItems: NavigationItem[] = [
@@ -70,10 +72,10 @@ const hrNavigationItems: NavigationItem[] = [
   { label: 'Ca làm việc', path: routePaths.shifts },
   { label: 'Face profiles', path: routePaths.faceProfiles },
   { label: 'Chấm công công ty', path: routePaths.attendance },
+  { label: 'Báo cáo', path: routePaths.reports },
   { label: 'Duyệt sửa công', path: routePaths.corrections },
   { label: 'Đơn nghỉ phép', path: routePaths.leave },
-  { label: 'Audit logs', path: routePaths.auditLogs },
-  { label: 'Thông báo', path: routePaths.notifications },
+  { label: 'Tài khoản', path: routePaths.settings },
   { label: 'Chatbox', path: routePaths.chatbox },
 ]
 
@@ -82,14 +84,9 @@ const managerNavigationItems: NavigationItem[] = [
   { label: 'Team của tôi', path: routePaths.employees },
   { label: 'Ca làm việc', path: routePaths.shifts },
   { label: 'Chấm công team', path: routePaths.attendance },
+  { label: 'Báo cáo team', path: routePaths.reports },
   { label: 'Duyệt nghỉ phép', path: routePaths.leave },
   { label: 'Xác nhận sửa công', path: routePaths.corrections },
-  { label: 'Thông báo', path: routePaths.notifications },
-  { label: 'Chatbox', path: routePaths.chatbox },
-]
-
-const employeeNavigationItems: NavigationItem[] = [
-  { label: 'Nghỉ phép', path: routePaths.leave },
   { label: 'Chatbox', path: routePaths.chatbox },
 ]
 
@@ -104,10 +101,6 @@ export function getNavigationItemsForRole(role: RoleName | null | undefined): Na
 
   if (role === 'manager') {
     return managerNavigationItems
-  }
-
-  if (role === 'employee') {
-    return employeeNavigationItems
   }
 
   return []

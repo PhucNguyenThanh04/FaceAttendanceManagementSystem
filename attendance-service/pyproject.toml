@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "attendance-service"
+version = "0.1.0"
+description = "Face recognition and attendance AI service"
+authors = ["PhucNguyenThanh04 <thanhphucnguyen101204@gmail.com>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+fastapi = "0.115.6"
+uvicorn = {version = "0.34.0", extras = ["standard"]}
+python-multipart = "0.0.20"
+httpx = "0.28.1"
+pydantic = "2.10.4"
+pydantic-settings = "2.7.0"
+python-dotenv = "1.0.1"
+qdrant-client = "1.12.1"
+numpy = "1.26.4"
+opencv-python-headless = "4.10.0.84"
+Pillow = "10.4.0"
+onnxruntime-gpu = "1.18.0"
+insightface = "0.7.3"
+easydict = "1.13"
+tqdm = "4.67.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "8.3.4"
+ruff = "0.8.4"
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
